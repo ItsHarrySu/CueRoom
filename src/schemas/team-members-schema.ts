@@ -10,9 +10,9 @@ export const teamMembersSchema: CollectionSchema = {
     { name: 'status', storage: 'text', interpretation: { kind: 'select', options: ['active'] }, required: true },
   ],
   permissions: {
-    anonymous: { read: false, create: false, update: false, delete: false },
+    '*': { read: false, create: false, update: false, delete: false },
     viewer: { read: false, create: false, update: false, delete: false },
-    member: { read: 'own', create: false, update: false, delete: false },
-    admin: { read: true, create: false, update: false, delete: false },
+    member: { read: false, create: false, update: false, delete: false },
+    admin: { read: false, create: false, update: false, delete: false },
   },
 }

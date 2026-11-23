@@ -13,7 +13,7 @@ export const tracksSchema: CollectionSchema = {
     { name: 'addedBy', storage: 'text', interpretation: 'plain', required: true, immutable: true, userBound: true },
   ],
   permissions: {
-    anonymous: { read: false, create: false, update: false, delete: false },
+    '*': { read: false, create: false, update: false, delete: false },
     viewer: { read: false, create: false, update: false, delete: false },
     member: { read: 'team', create: false, update: false, delete: false },
     admin: { read: true, create: false, update: false, delete: false },

@@ -5,6 +5,7 @@ import { roomsSchema } from './rooms-schema'
 import { tracksSchema } from './tracks-schema'
 import { teamMembersSchema } from './team-members-schema'
 
+const roles = ['*', 'viewer', 'member', 'admin']
 const row = { data: { roomId: 'room', userId: 'alice' }, createdBy: 'creator' }
 const membership = { isTeamMember: (team: string, user: string) => team === 'room' && user === 'bob' }
 
@@ -14,28 +15,35 @@ it('registers the three collections with no SDK schema-lint findings', () => {
 })
 
 describe.each([roomsSchema, tracksSchema, teamMembersSchema])('$name client permissions', (schema) => {
-  it.each(['anonymous', 'viewer', 'member', 'admin'])('denies direct writes by %s', (role) => {
+  it.each(roles)('denies direct writes by %s', (role) => {
     expect(canCreate(schema, role)).toBe(false)
     expect(canUpdate(schema, role, row, 'alice', membership)).toBe(false)
     expect(canDelete(schema, role, row, 'alice', membership)).toBe(false)
   })
 
-  it('denies viewer and anonymous reads and grants admin reads', () => {
-    for (const role of ['viewer', 'anonymous']) {
-      expect(canRead(schema, role, row, 'alice', membership)).toBe(false)
-    }
-    expect(canRead(schema, 'admin', row, 'outsider', membership)).toBe(true)
+  it('declares a deny-all wildcard for unlisted roles', () => {
+    expect(schema.permissions['*']).toEqual({ read: false, create: false, update: false, delete: false })
   })
 })
 
-it.each([roomsSchema, tracksSchema])('allows a team member or the row creator to read $name', (schema) => {
-  expect(canRead(schema, 'member', row, 'bob', membership)).toBe(true)
-  expect(canRead(schema, 'member', row, 'creator', membership)).toBe(true)
-  expect(canRead(schema, 'member', row, 'outsider', membership)).toBe(false)
+describe.each([roomsSchema, tracksSchema])('$name reads', (schema) => {
+  it.each(['*', 'viewer'])('denies reads by %s even for a team member', (role) => {
+    expect(canRead(schema, role, row, 'bob', membership)).toBe(false)
+  })
+
+  it('allows active team members and admins and denies an unrelated member', () => {
+    expect(canRead(schema, 'member', row, 'bob', membership)).toBe(true)
+    expect(canRead(schema, 'admin', row, 'outsider', membership)).toBe(true)
+    expect(canRead(schema, 'member', row, 'outsider', membership)).toBe(false)
+  })
+
+  it('allows the record creator to read without team membership', () => {
+    expect(canRead(schema, 'member', row, 'creator', membership)).toBe(true)
+  })
 })
 
-it('scopes membership reads to userId even when another user created the row', () => {
-  expect(canRead(teamMembersSchema, 'member', row, 'alice', membership)).toBe(true)
-  expect(canRead(teamMembersSchema, 'member', row, 'creator', membership)).toBe(false)
-  expect(canRead(teamMembersSchema, 'member', row, 'bob', membership)).toBe(false)
+it.each(roles)('denies membership reads by %s, including the membership owner', (role) => {
+  for (const user of ['alice', 'creator', 'bob']) {
+    expect(canRead(teamMembersSchema, role, row, user, membership)).toBe(false)
+  }
 })

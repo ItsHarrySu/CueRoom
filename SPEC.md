@@ -20,7 +20,9 @@ Retain the generated users and settings schemas and their permissions in src/sch
 
 ## Security
 
-Use DeepSpace's documented teamField and team_members mechanism to restrict room and track reads to active members of the corresponding team, including lists and subscription events. Prevent membership records from exposing another team's roster. Deny all direct client creates, updates, and deletes on these three collections. UI controls confer no authority.
+Rooms and tracks use `teamField: 'roomId'` for member reads, including lists and subscriptions. Admins may read rooms and tracks. Wildcard and viewer roles have no access. Every client role is denied reads of `team_members` and direct creates, updates and deletes on all three collections. DeepSpace resolves team membership internally.
+
+Room creation must establish active team membership for the room creator and handle partial failures without leaving a creator-readable room that lacks the owner's active membership. Track creators must already be active members of the room. CueRoom v1 has no membership removal or deactivation operation. The SDK's `'team'` permission also grants reads to the envelope's `createdBy` user. Externally removing a creator's membership therefore cannot guarantee revocation of reads on records they created.
 
 For every action, obtain the caller ID from verified DeepSpace authentication. Reject caller-supplied identity, membership, ownership, and other unexpected fields. For existing-room edits verify active membership, and for every referenced track verify that the target room owns it. Both active collaborators may edit the shared setlist. Only the create and token-validated join paths may establish membership.
 
