@@ -115,3 +115,22 @@ Local verification covers type-check, production build, lint, unit tests, and th
 2. Plans and Backend/Security each record their decision on the issue. Review the constant endpoint, app authentication, maximum cost, transactional quota and ambiguous-delivery behavior. The preview branch has no provider transport.
 3. In a follow-up reviewed change, test the verified provider envelope with fixtures, including malformed output and zero upstream calls on denial. Race the quota across Workers. Confirm per-room and app spending limits.
 4. For a live check, give the owner the target room, exact metadata scope, model, maximum charge and one-attempt limit. Record explicit approval for that attempt. Require manual confirmation against the unchanged setlist, show the result as text, and record the observed charge. An ambiguous timeout consumes the attempt; another request requires new approval.
+
+## CR-012 B email contract review
+
+Workstream B starts at the PR #17 merge, `239a523`. Implementation awaits the sender decision and catalog evidence required by issue #16.
+
+| Question | Evidence from installed deepspace@0.44.2 |
+| --- | --- |
+| Endpoint and sender | The bundled changelog (0.43.0) names `email/send` and specifies `DeepSpace Apps <notifications@updates.app.space>`. It says the platform ignores a supplied `from` and refuses From, Sender and Return-Path headers. This conflicts with issue #16's required app-specific address. |
+| Catalog and payload | Read-only CLI commands `integrations info email/send --json`, `integrations list --json` and the companion OpenAI lookup returned `catalog_unavailable`. Direct catalog and documentation requests were denied by the environment proxy. Request fields, acknowledgment envelope and current price remain unverified. |
+| Identity and charges | The installed CLI invoke code uses a logged-in bearer and obtains price from the catalog. This describes interactive invocation only. CueRoom has no email billing entry. Production server credentials, billing principal and per-send maximum need authoritative confirmation. |
+
+Plans decision requested on issue #16: accept the platform sender and amend the requirement, or supply a verified app-specific sender contract. Capture the read-only catalog result and confirm server authentication with Backend/Security before implementing delivery. Copy invitation remains available while this is pending.
+
+Proposed review criteria for delivery:
+
+- Accept a room ID and one recipient. Verify the authenticated caller owns the exact room and has one active membership. Construct the URL from trusted app configuration and the stored invite token, and keep the existing sign-in and token-verified join.
+- Atomically reserve app, owner and room limits in durable storage before dispatch. Bind a deduplication key to each confirmation. A fresh room must not reset the app or owner limit. Fail closed on reservation errors and retain the reservation after ambiguous delivery.
+- Use one constant provider endpoint behind a dedicated server action. Keep SEC-001's generic execution denial. Return safe status messages, omit tokens and addresses from logs, and avoid automatic retries on timeout.
+- Test with a mock provider and a real durable-storage concurrency check. Obtain independent Plans and Backend/Security approval for any developer-billed transport and explicit owner approval for a live delivery.
