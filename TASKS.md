@@ -13,9 +13,9 @@ Plans is the Lead Architect. Dependencies below are planning prerequisites. Plan
 | CR-007 Frontend dashboard and setlist editor | Codex | Implemented, pending Plans review | CR-002, CR-005, CR-006 | Public landing, authenticated room dashboard, invitation handling and track editor | Live multi-user verification pending. |
 | CR-008 Data subscriptions and collaborative ordering | Codex | Awaiting Plans review | CR-004, CR-006, CR-007 | Verified reorder action, editor controls, unit coverage and two-session Playwright scenario | Authenticated browser run pending |
 | CR-009 Multi-user authorization and integration tests | Codex | Awaiting authenticated run and Plans review | CR-005 through CR-008 | Three-account suite and local results below | Backend security review pending |
-| CR-010 Premium visual and UX redesign | Codex | Pending Plans review | CR-009 | Landing, workspace and setlist editor redesign | — |
-| CR-011 Advanced setlist features | Unassigned | Pending | CR-010 | — | — |
-| CR-012 Selective integration and polish | Unassigned | Pending | CR-011 | — | — |
+| CR-010 Premium visual and UX redesign | Codex | Merged via #11 | CR-009 | Landing, workspace and setlist editor redesign | — |
+| CR-011 Advanced setlist features | Unassigned | Deferred until after CR-012 and submission gates | CR-010 | — | — |
+| CR-012 Selective integration and polish | Codex | A in progress; paid execution awaiting catalog and independent reviews (#16) | CR-010 | — | — |
 | CR-013 Production deployment and verification | Unassigned | Pending | CR-012 | — | Backend security sign-off pending |
 | CR-014 Assessment submission | Unassigned | Pending | CR-013 | — | — |
 
@@ -108,3 +108,10 @@ Record the Playwright pass, fail and skip totals with the commit SHA for Plans. 
 The shared SQLite RecordRoom enforces the 200-track ceiling. Cold initialization uses the SDK readiness request under the Durable Object event barrier, then a synchronous transaction verifies the composite index, migrates legacy rows, and installs insert/update guards. Migration preserves IDs, timestamps, and canonical order. Invalid data or an invalid physical index stops initialization. The SDK raw SQL debug API is disabled.
 
 Local verification covers type-check, production build, lint, unit tests, and the authenticated workerd suite in `npm run test:capacity`. Three independent Worker instances share one SDK 0.44.2 RecordRoom. Coverage includes legacy migration, rejected initialization, a cold restart, last-slot competition, immutable-marker collisions, acknowledgement loss, deletion and reuse, membership checks, subscription visibility, and interleaved order changes. The multi-account browser suite requires a DeepSpace CLI login and could not start in this workspace. Independent Backend and Plans review and release approval remain pending.
+
+## CR-012 A manual verification and billing approval
+
+1. On the pinned CLI, capture the read-only OpenAI catalog entry including model, price, request limits and response envelope. Record evidence in issue #16. Resolve any differences with Plans.
+2. Plans and Backend/Security each record their decision on the issue. Review the constant endpoint, app authentication, maximum cost, transactional quota and ambiguous-delivery behavior. The preview branch has no provider transport.
+3. In a follow-up reviewed change, test the verified provider envelope with fixtures, including malformed output and zero upstream calls on denial. Race the quota across Workers. Confirm per-room and app spending limits.
+4. For a live check, give the owner the target room, exact metadata scope, model, maximum charge and one-attempt limit. Record explicit approval for that attempt. Require manual confirmation against the unchanged setlist, show the result as text, and record the observed charge. An ambiguous timeout consumes the attempt; another request requires new approval.

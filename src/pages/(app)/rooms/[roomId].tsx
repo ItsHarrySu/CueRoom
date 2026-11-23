@@ -15,6 +15,7 @@ import {
 } from '@/cueroom/data'
 import { ActionForm, ReadState, SignIn } from '@/cueroom/UI'
 
+import { TransitionPreview } from '@/cueroom/TransitionPreview'
 import { SetInsights } from '@/cueroom/SetInsights'
 import { summarize, validBpm, energyLevel } from '@/cueroom/insights'
 
@@ -108,6 +109,7 @@ type Edit = { kind: 'add' } | { kind: 'edit' | 'delete'; row: RecordData<Track> 
 
 function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
   const { roomId } = room
+  const auth = useAuthStatus()
   const rooms = useQuery<Room>('rooms')
   const query = useQuery<Track>('tracks', { where: { roomId }, limit: 201 })
   const rows = orderedTracks(query.records, room)
@@ -268,7 +270,10 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
       </div>
       </div>
       <div className="mobile-add"><div><small>{room.name}</small>{query.status === 'ready' && <b>{count} tracks</b>}</div>{addTrack}</div>
-      {query.status === 'ready' && <SetInsights tracks={tracks} selected={selected} />}
+      {query.status === 'ready' && <SetInsights tracks={tracks} selected={selected}>
+        {auth.userId && auth.userId === room.ownerId && <TransitionPreview key={JSON.stringify(rows.map(row => [row.recordId, row.data.bpm, row.data.title])) + selected}
+          roomId={roomId} pair={rows.slice(Math.max(0, Math.min(selected, rows.length - 2))).slice(0, 2)} />}
+      </SetInsights>}
       {edit && (
         <TrackDialog edit={edit} roomId={roomId} close={() => setEdit(null)} refresh={refresh} />
       )}
