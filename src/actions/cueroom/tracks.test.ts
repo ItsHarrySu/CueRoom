@@ -80,9 +80,9 @@ it.each([[], { roomId: 'room', track: [] }, { roomId: '../room', track }, { room
     expect(f.get).not.toHaveBeenCalled()
   })
 
-it.each(['addTrack', 'updateTrack', 'deleteTrack'])('requires verified identity and one exact active membership for %s', async name => {
+it.each(['addTrack', 'updateTrack', 'deleteTrack', 'reorderTracks'])('requires verified identity and one exact active membership for %s', async name => {
   const f = fixture()
-  const params = name === 'addTrack' ? { roomId: 'room', track } : { roomId: 'room', trackId: 'target', ...(name === 'updateTrack' && { patch: track }) }
+  const params = name === 'reorderTracks' ? { roomId: 'room', orderedTrackIds: [] } : name === 'addTrack' ? { roomId: 'room', track } : { roomId: 'room', trackId: 'target', ...(name === 'updateTrack' && { patch: track }) }
   for (const [uid, jwt] of [['', 'jwt'], ['anon-1', 'jwt'], ['alice', '']]) {
     expect((await f.call(name, params, uid, jwt)).success).toBe(false)
   }
@@ -233,4 +233,59 @@ it('returns a controlled failure when a create is refused', async () => {
   expect(result.success).toBe(false)
   expect(result.error).not.toContain(failure.error)
   expect(f.update).not.toHaveBeenCalled()
+})
+
+function reorderFixture() {
+  const f = fixture()
+  for (const key of ['a', 'b']) f.tracks.set(key, stored)
+  f.room.trackOrder = ['a', 'b']
+  return { ...f, move: (ids: unknown = ['b', 'a']) => f.call('reorderTracks', { roomId: 'room', orderedTrackIds: ids }) }
+}
+
+it('persists a complete permutation and returns the verified room ID', async () => {
+  const f = reorderFixture()
+  expect(await f.move()).toEqual(ok({ roomId: 'room' }))
+  expect(f.room.trackOrder).toEqual(['b', 'a'])
+  expect(f.update.mock.calls).toEqual([['rooms', 'room', { trackOrder: ['b', 'a'] }]])
+})
+
+it.each([null, ['a'], ['a', 'a'], ['a', 'foreign'], ['a', 'b', 'deleted']].map(ids => ({ ids })))(
+  'rejects incomplete, duplicate, foreign and stale orders ($ids)', async ({ ids }) => {
+    const f = reorderFixture()
+    f.tracks.set('foreign', { ...stored, roomId: 'other' })
+    expect((await f.move(ids)).success).toBe(false)
+    expect(f.update).not.toHaveBeenCalled()
+  })
+
+it('rejects forged fields and a mismatched room envelope', async () => {
+  const f = reorderFixture()
+  expect((await f.call('reorderTracks', { roomId: 'room', orderedTrackIds: ['a','b'], userId: 'alice' })).success).toBe(false)
+  expect(f.get).not.toHaveBeenCalled()
+  f.get.mockResolvedValueOnce(ok({ record: { recordId: 'wrong', data: f.room } }))
+  expect((await f.move()).success).toBe(false)
+  expect(f.update).not.toHaveBeenCalled()
+})
+
+it.each(['add', 'delete', 'reorder', 'refusal', 'lost reply'])('verifies order after a competing write or %s', async mode => {
+  const f = reorderFixture()
+  f.update.mockImplementationOnce(async () => {
+    if (mode === 'refusal') return failure
+    if (mode !== 'reorder') f.room.trackOrder = ['b', 'a']
+    if (mode === 'add') f.tracks.set('new', stored)
+    if (mode === 'delete') f.tracks.delete('a')
+    throw Error(failure.error)
+  })
+  const result = await f.move()
+  expect(result.success).toBe(mode === 'lost reply')
+  expect(result.error ?? '').not.toContain(failure.error)
+  if (mode === 'add') expect(f.room.trackOrder).toEqual(['b','a','new'])
+  if (mode === 'delete') expect(f.room.trackOrder).toEqual(['b'])
+  if (mode === 'reorder') expect(f.update).toHaveBeenCalledTimes(1)
+})
+
+it('shares the isolate guard between reorder and track mutations', async () => {
+  const f = reorderFixture()
+  const results = await Promise.all([f.move(), f.add(), f.del(), f.move()])
+  expect(results.map(r => r.success)).toEqual([true, false, false, false])
+  expect(results.slice(1).every(r => r.error?.includes('busy'))).toBe(true)
 })

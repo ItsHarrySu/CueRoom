@@ -11,7 +11,7 @@ Plans is the Lead Architect. Dependencies below are planning prerequisites. Plan
 | CR-005 Room creation and invitation joining | Codex | Complete, pending live integration verification | CR-004 | Authenticated room actions and focused unit tests | Live multi-user verification pending. |
 | CR-006 Track CRUD and validation | Codex | Complete, pending live integration verification | CR-004, CR-005 | Authenticated actions and mocked RecordRoom tests | Live integration verification pending. |
 | CR-007 Frontend dashboard and setlist editor | Codex | Implemented, pending Plans review | CR-002, CR-005, CR-006 | Public landing, authenticated room dashboard, invitation handling and track editor | Live multi-user verification pending. |
-| CR-008 Data subscriptions and collaborative ordering | Unassigned | Pending | CR-004, CR-006, CR-007 for editor integration | — | — |
+| CR-008 Data subscriptions and collaborative ordering | Codex | Awaiting Plans review | CR-004, CR-006, CR-007 | Verified reorder action, editor controls, unit coverage and two-session Playwright scenario | Authenticated browser run pending |
 | CR-009 Multi-user authorization and integration tests | Unassigned | Pending | CR-005 through CR-008 for full scenarios | — | — |
 | CR-010 Deployment, production verification and submission | Unassigned | Pending | CR-003, CR-009 | — | — |
 
@@ -34,3 +34,13 @@ SDK 0.44.2 merges a partial update with the current record inside RecordRoom. Tr
 Track actions reject overlapping requests for the same room in one Worker isolate. Across isolates, capacity checks, record writes and order updates are separate operations with no transaction or compare-and-swap in ActionTools. Adds recheck capacity and attempt to remove their own acknowledged row on observed overflow. Order repair reloads live IDs and stored order after a write and retries once. Ambiguous creates can repair order but cannot safely identify a row to undo or return. Refresh before retrying an unconfirmed add because replay can create a duplicate.
 
 CR-008 must account for intervening or late writes after verification, including concurrent reorders. Strict distributed capacity, atomic order changes and crash recovery remain open. CR-009 should exercise these paths and authorization on a live RecordRoom.
+
+## CR-008 review notes
+
+Reorder shares the existing isolate-local guard with add, edit and delete. It checks the submitted permutation against a complete room-scoped track query, writes only trackOrder, then rereads live IDs and the room. A changed live set triggers bounded reconciliation from fresh state and rejects the move. A different stored order triggers rejection without replaying the submitted order. Readback can confirm a write whose acknowledgement was lost.
+
+SDK 0.44.2 ActionTools sends each operation to RecordRoom separately and exposes no transaction or conditional update. Across isolates a write can intervene between checks or after readback. A stale order over the same live IDs is indistinguishable from an intentional move under this contract. Confirmation describes the observed state. It cannot establish a globally last accepted reorder.
+
+The editor subscribes to rooms and tracks by roomId. RecordRoom checks socket identity and schema read permissions for changes, and the SDK reissues active queries on reconnect. Each render recomputes order from both snapshots, skipping duplicates and deleted IDs and appending omitted live IDs in ordinal order. Snapshots can arrive separately. Reorder uses connection readiness, renders subscribed data throughout submission, and resubscribes after the response. The SDK may display its prior snapshot while the fresh query is in flight.
+
+The Playwright scenario in tests/collab.spec.ts exercises add, edit, delete, keyboard reorder and persistence with two independent authenticated browsers. Run it locally with two usable DeepSpace test accounts. This workspace had zero usable accounts. Live collaboration and third-user denial remain pending CR-009 verification.

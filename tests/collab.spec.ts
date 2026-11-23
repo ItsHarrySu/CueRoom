@@ -131,3 +131,42 @@ test('API status page shows local retry after first-load API failure', async ({ 
   await expect.poll(() => requestCount).toBeGreaterThan(requestsAfterFailure)
   expect(user.page.url()).toBe(urlAfterFailure)
 })
+
+test('members see track changes and persist a keyboard reorder across sessions', async ({ users }) => {
+  const [owner, member] = await users(2)
+  const a = owner.page
+  const b = member.page
+  await a.goto('/home')
+  await a.getByRole('button', { name: 'Create room' }).click()
+  const dialog = a.getByRole('dialog')
+  await dialog.getByLabel('Room name').fill('Collaboration check')
+  await dialog.getByRole('button', { name: 'Create room' }).click()
+  await a.waitForURL('**/rooms/*')
+  await a.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(a.url()).origin })
+  await a.getByRole('button', { name: 'Copy invitation' }).click()
+  const invite = await a.evaluate(() => navigator.clipboard.readText())
+  await b.goto(invite)
+  await b.getByRole('button', { name: 'Accept invitation' }).click()
+  await expect(b.getByText('An open setlist')).toBeVisible()
+
+  for (const title of ['Opening', 'Closing']) {
+    await a.getByRole('button', { name: 'Add track' }).click()
+    await dialog.getByLabel('Title').fill(title)
+    await dialog.getByLabel('Artist').fill('DJ')
+    await dialog.getByRole('button', { name: 'Add track' }).click()
+    await expect(b.getByRole('button', { name: 'Edit ' + title })).toBeVisible()
+  }
+  const titles = (page: typeof a) => page.locator('.track-info strong')
+  await b.getByRole('button', { name: 'Move Closing up' }).press('Enter')
+  for (const page of [a, b]) await expect(titles(page)).toHaveText(['Closing', 'Opening'])
+  await Promise.all([a.reload(), b.reload()])
+  for (const page of [a, b]) await expect(titles(page)).toHaveText(['Closing', 'Opening'])
+
+  await a.getByRole('button', { name: 'Edit Opening' }).click()
+  await dialog.getByLabel('Title').fill('Encore')
+  await dialog.getByRole('button', { name: 'Save changes' }).click()
+  await expect(titles(b)).toHaveText(['Closing', 'Encore'])
+  await b.getByRole('button', { name: 'Delete Closing' }).click()
+  await b.getByRole('dialog').getByRole('button', { name: 'Delete track' }).click()
+  await expect(titles(a)).toHaveText(['Encore'])
+})
