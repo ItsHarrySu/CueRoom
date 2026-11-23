@@ -68,7 +68,7 @@ export function orderedTracks(rows: RecordData<Track>[], room: Room) {
   )
 }
 
-type Action = 'createRoom' | 'joinRoom' | 'addTrack' | 'updateTrack' | 'deleteTrack'
+type Action = 'createRoom' | 'joinRoom' | 'addTrack' | 'updateTrack' | 'deleteTrack' | 'reorderTracks'
 export async function act(name: Action, params: Record<string, unknown>) {
   const token = await getAuthToken()
   if (!token) throw Error('Sign in again to continue.')
@@ -94,7 +94,9 @@ export async function act(name: Action, params: Record<string, unknown>) {
       ? data?.joined === true
       : name === 'createRoom'
         ? typeof data?.roomId === 'string' && uuid.test(data.roomId)
-        : typeof data?.trackId === 'string' &&
+        : name === 'reorderTracks'
+          ? typeof data?.roomId === 'string' && data.roomId === params.roomId
+          : typeof data?.trackId === 'string' &&
           !!data.trackId &&
           (name === 'addTrack' || data.trackId === params.trackId)
   if (!confirmed) throw Error('The server could not confirm this change.')

@@ -55,6 +55,15 @@ describe('workspace data', () => {
     ).toEqual(['d', 'b', 'a', 'z'])
     expect(validRoom({ ...row('other'), data: room })).toBe(false)
   })
+  it('checks reorder confirmation against the requested room', async () => {
+    vi.mocked(getAuthToken).mockResolvedValue('test-token')
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(Response.json({ success: true, data: { roomId: 'other' } }))
+      .mockResolvedValueOnce(Response.json({ success: true, data: { roomId } })))
+    const params = { roomId, orderedTrackIds: ['b', 'a'] }
+    await expect(act('reorderTracks', params)).rejects.toThrow('confirm')
+    await expect(act('reorderTracks', params)).resolves.toEqual({ roomId })
+  })
   it('requires an SDK credential before posting', async () => {
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)

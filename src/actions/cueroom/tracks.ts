@@ -111,15 +111,40 @@ async function compensateOverflow(tools: ActionTools, roomId: string, created: s
   }
 }
 
-type Operation = 'add' | 'update' | 'delete'
+async function reorder(tools: ActionTools, roomId: string, ids: string[]) {
+  const matches = (current: Set<string>) => current.size === ids.length && ids.every(key => current.has(key))
+  const stale = () => fail('The setlist changed. Refresh and retry the move.')
+  if (!matches(await live(tools, roomId))) return stale()
+  try {
+    await tools.update('rooms', roomId, { trackOrder: ids })
+  } catch {
+    // A lost reply can follow a committed write. Never replay this order.
+  }
+  if (!matches(await live(tools, roomId))) {
+    await reconcile(tools, roomId)
+    return stale()
+  }
+  if (!same(await order(tools, roomId), ids)) return fail('Order unconfirmed. Refresh and retry the move.')
+  return { success: true as const, data: { roomId } }
+}
+
+const keysByOperation = {
+  add: ['roomId', 'track'],
+  update: ['roomId', 'trackId', 'patch'],
+  delete: ['roomId', 'trackId'],
+  reorder: ['roomId', 'orderedTrackIds'],
+}
+type Operation = keyof typeof keysByOperation
 function action(op: Operation): ActionHandler<Env> {
   return async ({ userId, callerJwt, params, tools }) => {
     if (!userId?.trim() || userId.startsWith('anon-') || !callerJwt?.trim()) return fail('Authentication required.')
-    const keys = op === 'add' ? ['roomId', 'track'] : op === 'update' ? ['roomId', 'trackId', 'patch'] : ['roomId', 'trackId']
+    const keys = keysByOperation[op]
     if (!object(params) || Object.keys(params).length !== keys.length || !keys.every(k => Object.hasOwn(params, k))) return fail('Invalid track request.')
-    const { roomId, trackId } = params
-    if (!id(roomId) || (op !== 'add' && !id(trackId))) return fail('Invalid identifier.')
-    const fields = op === 'delete' ? {} : trackFields(op === 'add' ? params.track : params.patch, op === 'add')
+    const { roomId, trackId, orderedTrackIds } = params
+    if (!id(roomId) || (keys.includes('trackId') && !id(trackId))) return fail('Invalid identifier.')
+    if (op === 'reorder' && (!Array.isArray(orderedTrackIds) || orderedTrackIds.length > capacity ||
+      !orderedTrackIds.every(id) || new Set(orderedTrackIds).size !== orderedTrackIds.length)) return fail('Invalid track order.')
+    const fields = op === 'add' || op === 'update' ? trackFields(op === 'add' ? params.track : params.patch, op === 'add') : {}
     if (!fields) return fail('Invalid track fields.')
     try {
       await order(tools, roomId)
@@ -131,6 +156,7 @@ function action(op: Operation): ActionHandler<Env> {
     if (busyRooms.has(roomId)) return fail('Room busy. Retry the request.')
     busyRooms.add(roomId)
     try {
+      if (op === 'reorder') return await reorder(tools, roomId, orderedTrackIds as string[])
       if (op === 'add') {
         if ((await live(tools, roomId)).size >= capacity) return fail('Room track limit reached.')
         let created: string | undefined
@@ -176,3 +202,4 @@ function action(op: Operation): ActionHandler<Env> {
 export const addTrack = action('add')
 export const updateTrack = action('update')
 export const deleteTrack = action('delete')
+export const reorderTracks = action('reorder')

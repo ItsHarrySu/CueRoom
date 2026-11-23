@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useAuthStatus, useQuery, type RecordData } from 'deepspace'
-import { Link2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useAuthStatus, useMutations, useQuery, type RecordData } from 'deepspace'
+import { ArrowUp, ArrowDown, Link2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Modal, useToast } from '@/components/ui'
 import {
   act,
@@ -109,6 +109,21 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
   const rows = orderedTracks(query.records, room)
   const [edit, setEdit] = useState<Edit | null>(null)
   const toast = useToast()
+  const [moving, setMoving] = useState(false)
+  const { ready } = useMutations('tracks')
+  async function move(index: number, destination: number) {
+    if (!ready || moving || destination < 0 || destination >= rows.length) return
+    const orderedTrackIds = rows.map(row => row.recordId)
+    orderedTrackIds.splice(destination, 0, ...orderedTrackIds.splice(index, 1))
+    setMoving(true)
+    try {
+      await act('reorderTracks', { roomId, orderedTrackIds })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Order unconfirmed.', 'Refreshing the setlist before retry.')
+    } finally {
+      refresh()
+    }
+  }
   async function share() {
     try {
       await navigator.clipboard.writeText(
@@ -136,7 +151,7 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
             <Link2 />
             Copy invitation
           </Button>
-          <Button disabled={query.status !== 'ready'} onClick={() => setEdit({ kind: 'add' })}>
+          <Button disabled={moving || query.status !== 'ready'} onClick={() => setEdit({ kind: 'add' })}>
             <Plus />
             Add track
           </Button>
@@ -166,12 +181,32 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
                   <Button
                     size="icon"
                     variant="ghost"
+                    aria-label={'Move ' + row.data.title + ' up'}
+                    disabled={moving || !ready || i === 0}
+                    onClick={() => move(i, i - 1)}
+                  >
+                    <ArrowUp />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={'Move ' + row.data.title + ' down'}
+                    disabled={moving || !ready || i === rows.length - 1}
+                    onClick={() => move(i, i + 1)}
+                  >
+                    <ArrowDown />
+                  </Button>
+                  <Button
+                    disabled={moving}
+                    size="icon"
+                    variant="ghost"
                     aria-label={'Edit ' + row.data.title}
                     onClick={() => setEdit({ kind: 'edit', row })}
                   >
                     <Pencil />
                   </Button>
                   <Button
+                    disabled={moving}
                     size="icon"
                     variant="ghost"
                     aria-label={'Delete ' + row.data.title}
