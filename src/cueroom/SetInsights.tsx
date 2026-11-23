@@ -2,7 +2,7 @@ import type { Track } from './data'
 import { EnergyChart } from './EnergyChart'
 import { transition } from './insights'
 
-export function SetInsights({ tracks, selected }: { tracks: Track[]; selected: number }) {
+export function SetInsights({ tracks, selected, children }: { tracks: Track[]; selected: number; children?: React.ReactNode }) {
   const pair = transition(tracks, selected)
   const start = Math.min(selected, tracks.length - 2)
   const number = (i: number) => String(i + 1).padStart(2, '0')
@@ -22,6 +22,7 @@ export function SetInsights({ tracks, selected }: { tracks: Track[]; selected: n
       {tracks.length ? <ol className="key-flow">{tracks.map((track, i) =>
         <li key={i} title={track.title}>{track.musicalKey || 'Unavailable'}</li>)}</ol> : <p>No tracks yet.</p>}
     </section>
+    {children}
     <section className="data-note"><h3>Data note</h3><p>Gaps indicate missing track metadata.</p></section>
   </aside>
 }

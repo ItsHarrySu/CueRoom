@@ -80,7 +80,7 @@ Validate reorder input against the current live ID set at acceptance. Reject mis
 - **P0** — Authentication, room creation, secure invitation joining, track CRUD and ordering, persistence, real-time synchronization, server-enforced authorization, loading and error states, and production deployment.
 - **P1** — Presence after security validation, sharing dialog, and improved drag-and-drop.
 - **P2** — Voting/comments, BPM warnings, energy progression, and export.
-- **Excluded** — Spotify playback, AI recommendations, payment integrations, audio processing, and custom authentication infrastructure.
+- **Excluded** — Spotify playback, generic integration execution, payment integrations, audio processing, and custom authentication infrastructure.
 
 ## Acceptance criteria
 
@@ -88,3 +88,7 @@ Validate reorder input against the current live ID set at acceptance. Reject mis
 2. As an authenticated third user without membership, attempt room and track reads, list queries, subscriptions, invalid-token joins, and all existing-room edits. Confirm no private data is returned or streamed and no unauthorized change persists. Attempt direct collection mutations even as a member. Test forged identity and another room's track ID on update, delete, and reorder.
 3. Exercise duplicate joins, competing reorders, stale permutations, capacity at 200, invalid field values, and failed writes. Verify rejected actions show errors, leave no false success state, and converge on persisted data after reload.
 4. Record implementation changes, compilation/build results, local tests, and multi-user test evidence separately. Record deployment outcome and perform the collaboration, persistence and denial checks on the actual deployed application before claiming production verification.
+
+## CR-012 selective integrations
+
+An active room owner may explicitly request display-only advice for adjacent tracks. The free preview uses recorded metadata. AI generation requires separate Plans and Backend/Security approval, verified developer billing, durable per-room quota and explicit cost confirmation. Only titles, artists, BPM, key and energy from the current room may enter model context. Future owner-triggered single-recipient invitation email is a separate workstream subject to verified sender and quota. See issue #16 for approval gates.
