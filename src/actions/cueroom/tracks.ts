@@ -63,11 +63,36 @@ async function rows(tools: ActionTools, collection: string, where: Record<string
   return records
 }
 
+async function inventory(tools: ActionTools, roomId: string) {
+  const ids = new Set<string>()
+  const slots = new Set<number>()
+  let offset = 0
+  for (;;) {
+    const options = { where: { roomId }, orderBy: 'capacitySlot', orderDir: 'asc' as const, limit: 50, offset }
+    const result = await tools.query('tracks', options)
+    if (result.success !== true || result.error !== undefined) return invalid()
+    const page = result.data
+    if (!Array.isArray(page.records) || page.count !== page.records.length || page.count > options.limit ||
+      ('offset' in page && page.offset !== offset)) return invalid()
+    for (const row of page.records) {
+      const slot = row.data.capacitySlot
+      if (!id(row.recordId) || ids.has(row.recordId) || row.data.roomId !== roomId ||
+        !id(row.data.creationToken) || typeof slot !== 'number' || !Number.isInteger(slot) ||
+        slot < 0 || slot >= capacity || slots.has(slot)) return invalid()
+      ids.add(row.recordId)
+      slots.add(slot)
+    }
+    if (!('nextOffset' in page)) {
+      if ('truncated' in page && page.truncated) return invalid()
+      return { ids, slots }
+    }
+    offset += page.count
+    if (!page.count || page.nextOffset !== offset || offset >= capacity) return invalid()
+  }
+}
+
 async function live(tools: ActionTools, roomId: string) {
-  const records = await rows(tools, 'tracks', { roomId }, capacity + 1)
-  const ids = new Set(records.map(row => row.recordId))
-  if (ids.size !== records.length) return invalid()
-  return ids
+  return (await inventory(tools, roomId)).ids
 }
 
 // Recompute from fresh snapshots after every write, including a lost acknowledgement.
@@ -75,7 +100,6 @@ async function reconcile(tools: ActionTools, roomId: string, trackId?: string, a
   for (let attempt = 0; attempt < 3; attempt++) {
     const stored = await order(tools, roomId)
     const missing = await live(tools, roomId)
-    if (adding && missing.size > capacity) return 'over-capacity'
     if (trackId && missing.has(trackId) !== adding) return false
     const desired = stored.filter(key => missing.delete(key))
     const append = adding && trackId && missing.delete(trackId)
@@ -93,22 +117,28 @@ async function reconcile(tools: ActionTools, roomId: string, trackId?: string, a
   return false
 }
 
-async function compensateOverflow(tools: ActionTools, roomId: string, created: string, userId: string) {
-  try {
-    const track = await read(tools, 'tracks', created)
-    if (track !== null) {
-      if (track.roomId !== roomId || track.addedBy !== userId) return false
-      try {
-        await tools.remove('tracks', created)
-      } catch {
-        // A lost acknowledgement can follow a committed delete.
-      }
-      if (await read(tools, 'tracks', created) !== null) return false
+async function allocate(tools: ActionTools, roomId: string, userId: string, fields: Record<string, unknown>) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { slots } = await inventory(tools, roomId)
+    if (slots.size === capacity) return fail('Room track limit reached.')
+    let capacitySlot = 0
+    while (slots.has(capacitySlot)) capacitySlot++
+    const trackId = crypto.randomUUID()
+    const creationToken = crypto.randomUUID()
+    try {
+      const result = await tools.create('tracks', { ...fields, roomId, addedBy: userId, capacitySlot, creationToken }, trackId)
+      if (result.success === false && result.error ===
+        `Duplicate: a record with roomId=${roomId}, capacitySlot=${capacitySlot} already exists in tracks`) continue
+    } catch {
+      // A committed write may lose its reply. Only inspect this attempt's ID.
     }
-    return await reconcile(tools, roomId, created) === true
-  } catch {
-    return false
+    const track = await read(tools, 'tracks', trackId)
+    if (track?.creationToken !== creationToken || track.roomId !== roomId ||
+      track.capacitySlot !== capacitySlot || track.addedBy !== userId)
+      return fail('Track creation unconfirmed. Refresh the room.')
+    return await reconcile(tools, roomId, trackId, true) ? success(trackId) : fail('Track order requires reconciliation.')
   }
+  return fail('Room busy. Retry the request.')
 }
 
 async function reorder(tools: ActionTools, roomId: string, ids: string[]) {
@@ -157,26 +187,7 @@ function action(op: Operation): ActionHandler<Env> {
     busyRooms.add(roomId)
     try {
       if (op === 'reorder') return await reorder(tools, roomId, orderedTrackIds as string[])
-      if (op === 'add') {
-        if ((await live(tools, roomId)).size >= capacity) return fail('Room track limit reached.')
-        let created: string | undefined
-        try {
-          const result = await tools.create('tracks', { ...fields, roomId, addedBy: userId })
-          if (result.success === true && result.error === undefined && id(result.data.recordId)) created = result.data.recordId
-        } catch {
-          // A lost create acknowledgement leaves no safe ID for a retry or rollback.
-        }
-        if (!created) {
-          await reconcile(tools, roomId)
-          return fail('Track creation unconfirmed. Refresh the room.')
-        }
-        const outcome = await reconcile(tools, roomId, created, true)
-        if (outcome === 'over-capacity') {
-          const cleaned = await compensateOverflow(tools, roomId, created, userId)
-          return fail(cleaned ? 'Room track limit reached.' : 'Track cleanup requires reconciliation.')
-        }
-        return outcome === true ? success(created) : fail('Track order requires reconciliation.')
-      }
+      if (op === 'add') return await allocate(tools, roomId, userId, fields)
       if (!id(trackId) || (await read(tools, 'tracks', trackId))?.roomId !== roomId) return fail('Track unavailable.')
       if (op === 'update') {
         const result = await tools.update('tracks', trackId, fields)

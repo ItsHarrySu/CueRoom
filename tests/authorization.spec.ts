@@ -76,7 +76,7 @@ for (const collection of ['rooms', 'tracks', 'team_members']) {
     const handle = await records(page, collection, roomId)
     const userId = await handle.evaluate(s => s.userId)
     const data = collection === 'rooms' ? { roomId: crypto.randomUUID(), ownerId: userId, inviteToken: crypto.randomUUID(), name: 'New', trackOrder: [] }
-      : collection === 'tracks' ? { roomId, ...track, addedBy: userId }
+      : collection === 'tracks' ? { roomId, ...track, addedBy: userId, capacitySlot: 1, creationToken: crypto.randomUUID() }
       : { teamId: crypto.randomUUID(), userId, status: 'active' }
     const before = storedRoom(roomId)
     expect(before.members).toHaveLength(1)

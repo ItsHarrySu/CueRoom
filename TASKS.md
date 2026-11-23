@@ -31,7 +31,7 @@ Future authenticated actions must set the room envelope ID equal to `roomId`, va
 
 Local tests exercised SDK permission predicates and schema lint. The cloud CLI reported `not_authenticated`. Live reads, lists, subscriptions, direct-write denial and persisted membership uniqueness still need authenticated integration coverage.
 
-## CR-006 review notes
+## CR-006 review notes (historical, capacity superseded by SEC-002)
 
 SDK 0.44.2 merges a partial update with the current record inside RecordRoom. Track edits submit only supplied fields and order writes submit only trackOrder. Track creation omits recordId because a supplied key is an upsert. Internally the SDK also uses putRecord for its generated timestamp/random ID, so absolute collision exclusion would require a create-only primitive.
 
@@ -102,3 +102,9 @@ npm test -- all
 ```
 
 Record the Playwright pass, fail and skip totals with the commit SHA for Plans. The full suite uses `all` because the default SDK command selects smoke and API specs.
+
+## SEC-002 review
+
+The shared SQLite RecordRoom enforces the 200-track ceiling. Cold initialization uses the SDK readiness request under the Durable Object event barrier, then a synchronous transaction verifies the composite index, migrates legacy rows, and installs insert/update guards. Migration preserves IDs, timestamps, and canonical order. Invalid data or an invalid physical index stops initialization. The SDK raw SQL debug API is disabled.
+
+Local verification covers type-check, production build, lint, unit tests, and the authenticated workerd suite in `npm run test:capacity`. Three independent Worker instances share one SDK 0.44.2 RecordRoom. Coverage includes legacy migration, rejected initialization, a cold restart, last-slot competition, immutable-marker collisions, acknowledgement loss, deletion and reuse, membership checks, subscription visibility, and interleaved order changes. The multi-account browser suite requires a DeepSpace CLI login and could not start in this workspace. Independent Backend and Plans review and release approval remain pending.

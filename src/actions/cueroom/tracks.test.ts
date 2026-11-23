@@ -17,17 +17,19 @@ function fixture() {
     const data = c === 'rooms' && k === 'room' ? room : tracks.get(k)
     return data ? ok({ record: { recordId: k, data: structuredClone(data) } }) : missing
   })
-  const query = vi.fn(async (c: string, options: { where: Data }) => {
+  const query = vi.fn(async (c: string, options: { where: Data, limit: number, offset?: number }) => {
     if (c === 'team_members') {
       expect(options).toEqual({ where: { teamId: 'room', userId: 'alice' }, limit: 2 })
       return ok({ records: [member], count: 1 })
     }
-    const records = [...tracks].filter(([, d]) => d.roomId === options.where.roomId).map(([recordId, data]) => ({ recordId, data }))
-    return ok({ records, count: records.length })
+    const records = [...tracks].filter(([, d]) => d.roomId === options.where.roomId).map(([recordId, data], i) => ({ recordId, data: { capacitySlot: i, creationToken: 'fixture-' + recordId, ...data } }))
+    const offset = options.offset ?? 0
+    const page = records.slice(offset, offset + options.limit)
+    return ok({ records: page, count: page.length, offset, ...(offset + page.length < records.length && { nextOffset: offset + page.length }) })
   })
-  const create = vi.fn(async (_: string, data: Data) => {
-    tracks.set('new', data)
-    return ok({ recordId: 'new' })
+  const create = vi.fn(async (_: string, data: Data, recordId: string): Promise<unknown> => {
+    tracks.set(recordId, data)
+    return ok({ recordId })
   })
   const update = vi.fn(async (c: string, k: string, data: Data): Promise<unknown> => {
     Object.assign(c === 'rooms' ? room : tracks.get(k)!, data)
@@ -45,13 +47,16 @@ function fixture() {
   return { ...tools, call, add, del, room, tracks, member }
 }
 
-it('appends after existing and missing live tracks and delegates ID allocation to RecordRoom', async () => {
+it('appends after existing and missing live tracks and uses independent server-generated identifiers', async () => {
   const f = fixture()
   for (const k of ['z', 'b', 'a']) f.tracks.set(k, stored)
   f.room.trackOrder = ['z', 'gone', 'z']
-  expect(await f.add()).toEqual(ok({ trackId: 'new' }))
-  expect(f.create.mock.calls).toEqual([['tracks', { ...stored, addedBy: 'alice' }]])
-  expect(f.room.trackOrder).toEqual(['z', 'a', 'b', 'new'])
+  const result = await f.add()
+  const [, data, created] = f.create.mock.calls[0]
+  expect(result).toEqual(ok({ trackId: created }))
+  expect(data).toEqual({ ...stored, addedBy: 'alice', creationToken: expect.any(String), capacitySlot: 3 })
+  expect(data.creationToken).not.toBe(created)
+  expect(f.room.trackOrder).toEqual(['z', 'a', 'b', created])
 })
 
 it('sends only the editable patch for SDK merge, including explicit nulls', async () => {
@@ -115,67 +120,31 @@ it('accepts only one competing local addition at 199 live tracks', async () => {
   expect(f.tracks.size).toBe(200)
 })
 
-function overflowFixture() {
+it('rescans after a definite conflict and generates a new pair of identifiers', async () => {
   const f = fixture()
-  for (let i = 0; i < 199; i++) f.tracks.set(String(i), stored)
-  f.create.mockImplementationOnce(async (_, data) => {
-    f.tracks.set('other', stored)
-    f.tracks.set('new', data)
-    f.room.trackOrder = ['other', 'new', '0', 'new']
-    return ok({ recordId: 'new' })
+  f.create.mockImplementationOnce(async () => {
+    f.tracks.set('competing', stored)
+    return { success: false, error: 'Duplicate: a record with roomId=room, capacitySlot=0 already exists in tracks' }
   })
-  return f
-}
-
-it('compensates its own addition when an external writer takes the last slot', async () => {
-  const f = overflowFixture()
-  expect((await f.add()).error).toMatch(/limit/)
-  expect(f.tracks.size).toBe(200)
-  expect(f.room.trackOrder).toContain('other')
-  expect(f.room.trackOrder).not.toContain('new')
+  expect((await f.add()).success).toBe(true)
+  const [first, second] = f.create.mock.calls
+  expect(first[2]).not.toBe(second[2])
+  expect(first[1].creationToken).not.toBe(second[1].creationToken)
+  expect(second[1].capacitySlot).toBe(1)
 })
 
-it.each(['creator', 'room', 'envelope'])('refuses compensation for a mismatched %s', async mismatch => {
-  const f = overflowFixture()
-  const get = f.get.getMockImplementation()!
-  f.get.mockImplementation(async (collection, key) => {
-    if (collection === 'tracks') {
-      const row = f.tracks.get(key)!
-      if (mismatch === 'creator') row.addedBy = 'bob'
-      if (mismatch === 'room') row.roomId = 'foreign'
-      if (mismatch === 'envelope') return ok({ record: { recordId: 'other', data: row } })
-    }
-    return get(collection, key)
-  })
-  expect(await f.add()).toEqual({ success: false, error: 'Track cleanup requires reconciliation.' })
-  expect(f.remove).not.toHaveBeenCalled()
-  expect(f.tracks.size).toBe(201)
+it.each([null, -1, 200, 1.5])('refuses invalid persisted slot %s before dispatch', async slot => {
+  const f = fixture()
+  f.tracks.set('invalid', { ...stored, capacitySlot: slot })
+  expect((await f.add()).success).toBe(false)
+  expect(f.create).not.toHaveBeenCalled()
 })
 
-it.each(['refused', 'lost acknowledgement', 'unconfirmed absence', 'order failure'])(
-  'checks persisted cleanup after %s', async mode => {
-    const f = overflowFixture()
-    f.remove.mockImplementationOnce(async (_, key) => {
-      if (mode === 'refused') return failure
-      f.tracks.delete(key)
-      if (mode === 'unconfirmed absence') f.get.mockResolvedValueOnce({ ...missing, data: {} })
-      if (mode === 'order failure') f.update.mockResolvedValue(failure)
-      throw Error(failure.error)
-    })
-    const result = await f.add()
-    expect(f.remove.mock.calls).toEqual([['tracks', 'new']])
-    expect(f.get.mock.calls.filter(([collection]) => collection === 'tracks')).toEqual([['tracks', 'new'], ['tracks', 'new']])
-    expect(f.tracks.has('other')).toBe(true)
-    expect(result.success).toBe(false)
-    if (mode === 'lost acknowledgement') {
-      expect(result.error).toMatch(/limit/)
-      expect(f.room.trackOrder.slice(0, 2)).toEqual(['other', '0'])
-      expect(f.room.trackOrder).not.toContain('new')
-      expect(f.room.trackOrder).toHaveLength(200)
-    } else {
-      expect(result.error).toBe('Track cleanup requires reconciliation.')
-    }
-  })
+it.each(['recordId', 'capacitySlot', 'creationToken'])('rejects caller-owned %s', async field => {
+  const f = fixture()
+  expect((await f.call('addTrack', { roomId: 'room', track: { ...track, [field]: 'bad' } })).success).toBe(false)
+  expect(f.create).not.toHaveBeenCalled()
+})
 
 it('recovers from lost delete acknowledgement and a failed first order write', async () => {
   const f = fixture()
@@ -200,9 +169,11 @@ it('reports persistent order failure after deletion', async () => {
 
 it('sanitizes ambiguous creation and repairs order without retrying creation', async () => {
   const f = fixture()
-  f.create.mockImplementationOnce(async (_, data) => { f.tracks.set('unknown', data); throw Error(failure.error) })
-  expect((await f.add()).error).toMatch(/unconfirmed/)
-  expect(f.room.trackOrder).toEqual(['unknown'])
+  f.create.mockImplementationOnce(async (_, data, key) => { f.tracks.set(key, data); throw Error(failure.error) })
+  const result = await f.add()
+  const key = f.create.mock.calls[0][2]
+  expect(result).toEqual(ok({ trackId: key }))
+  expect(f.room.trackOrder).toEqual([key])
   expect(f.create).toHaveBeenCalledTimes(1)
 })
 
@@ -288,4 +259,16 @@ it('shares the isolate guard between reorder and track mutations', async () => {
   const results = await Promise.all([f.move(), f.add(), f.del(), f.move()])
   expect(results.map(r => r.success)).toEqual([true, false, false, false])
   expect(results.slice(1).every(r => r.error?.includes('busy'))).toBe(true)
+})
+
+it.each([
+  { records: [], count: 0, nextOffset: 0 },
+  { records: [], count: 0, offset: 2 },
+  { records: [], count: 0, truncated: true },
+])('refuses malformed pagination before allocating', async page => {
+  const f = fixture()
+  f.query.mockResolvedValueOnce(ok({ records: [f.member], count: 1 }))
+  f.query.mockResolvedValueOnce(ok(page))
+  expect((await f.add()).success).toBe(false)
+  expect(f.create).not.toHaveBeenCalled()
 })
