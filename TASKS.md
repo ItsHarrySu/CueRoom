@@ -118,7 +118,7 @@ Local verification covers type-check, production build, lint, unit tests, and th
 
 ## CR-012 B email contract review
 
-Workstream B starts at the PR #17 merge, `239a523`. Implementation awaits the sender decision and catalog evidence required by issue #16.
+Workstream B starts at the PR #17 merge, `239a523`. The initial contract investigation produced the evidence below.
 
 | Question | Evidence from installed deepspace@0.44.2 |
 | --- | --- |
@@ -126,11 +126,10 @@ Workstream B starts at the PR #17 merge, `239a523`. Implementation awaits the se
 | Catalog and payload | Read-only CLI commands `integrations info email/send --json`, `integrations list --json` and the companion OpenAI lookup returned `catalog_unavailable`. Direct catalog and documentation requests were denied by the environment proxy. Request fields, acknowledgment envelope and current price remain unverified. |
 | Identity and charges | The installed CLI invoke code uses a logged-in bearer and obtains price from the catalog. This describes interactive invocation only. CueRoom has no email billing entry. Production server credentials, billing principal and per-send maximum need authoritative confirmation. |
 
-Plans decision requested on issue #16: accept the platform sender and amend the requirement, or supply a verified app-specific sender contract. Capture the read-only catalog result and confirm server authentication with Backend/Security before implementing delivery. Copy invitation remains available while this is pending.
+Plans subsequently approved the platform-managed sender on issue #16. The app-specific sender requirement is withdrawn. The pinned changelog and current public guide disagree on the sender input. The provider request fields, acknowledgment, server credentials, billing principal and maximum charge still require verification.
 
-Proposed review criteria for delivery:
+The room owner can open the email dialog and check a single recipient. The registered action verifies ownership and active membership and reports delivery unavailable before reserving quota. The delivery seam builds a bounded plain-text invitation from the configured app name and the stored room token. Only tests supply a transport.
 
-- Accept a room ID and one recipient. Verify the authenticated caller owns the exact room and has one active membership. Construct the URL from trusted app configuration and the stored invite token, and keep the existing sign-in and token-verified join.
-- Atomically reserve app, owner and room limits in durable storage before dispatch. Bind a deduplication key to each confirmation. A fresh room must not reset the app or owner limit. Fail closed on reservation errors and retain the reservation after ambiguous delivery.
-- Use one constant provider endpoint behind a dedicated server action. Keep SEC-001's generic execution denial. Return safe status messages, omit tokens and addresses from logs, and avoid automatic retries on timeout.
-- Test with a mock provider and a real durable-storage concurrency check. Obtain independent Plans and Backend/Security approval for any developer-billed transport and explicit owner approval for a live delivery.
+The proposed initial limits are 30 attempts per app, 10 per owner and 3 per room in a rolling 24-hour window. A private app-scoped D1 batch prunes expired reservations and conditionally inserts one unique confirmation under all three limits. Ambiguous dispatch consumes the reservation. The ledger excludes recipients and invite tokens.
+
+Live transport requires verified catalog evidence and independent Backend/Security and Plans billing approval. A live test additionally requires explicit approval for the recipient and charge.

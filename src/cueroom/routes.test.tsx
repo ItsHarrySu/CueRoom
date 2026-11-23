@@ -61,3 +61,11 @@ it('renders move controls in subscribed room order with the boundaries disabled'
   expect(buttons.map(tag => tag.match(/aria-label="([^"]+)"/)?.[1])).toEqual(['Move b up', 'Move b down', 'Move a up', 'Move a down'])
   expect(buttons.map(tag => tag.includes(' disabled=""'))).toEqual([true, false, false, true])
 })
+
+it('offers email invitations to the room owner only', () => {
+  const room = { recordId: id, data: { roomId: id, ownerId: 'a', name: 'Set', trackOrder: [] } }
+  sdk.query.mockImplementation(collection => ({ status: 'ready', records: collection === 'rooms' ? [room] : [] }))
+  expect(page(path)).toContain('Send invitation email')
+  sdk.auth.mockReturnValue({ isSignedIn: true, userId: 'b' })
+  expect(page(path)).not.toContain('Send invitation email')
+})
