@@ -1,24 +1,11 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { AuthOverlay } from 'deepspace'
-import { AudioLines } from 'lucide-react'
 import { Button } from '@/components/ui'
 
-export function Brand() {
-  return (
-    <span className="inline-flex items-center gap-2 font-bold tracking-tight">
-      <AudioLines
-        aria-hidden
-        className="rounded-lg bg-primary p-1 text-primary-foreground"
-        size={30}
-      />
-      CueRoom
-    </span>
-  )
-}
 export function SignIn({ invite = false }: { invite?: boolean }) {
   const [open, setOpen] = useState(false)
   return (
-    <section className="studio panel">
+    <section className="studio access-panel">
       <h1>{invite ? 'Join this room' : 'Your workspace'}</h1>
       <p>Sign in to {invite ? 'accept your invitation.' : 'open your rooms and plan a set.'}</p>
       <Button onClick={() => setOpen(true)}>Sign in to CueRoom</Button>
@@ -70,7 +57,7 @@ export function ActionForm({
 export function ReadState({ status, error }: { status: string; error?: string }) {
   if (status === 'ready') return null
   return (
-    <p role="status">
+    <p className="read-state" role="status">
       {status === 'loading'
         ? 'Loading workspace…'
         : /denied|forbidden|permission|unauthor/i.test(error ?? '')

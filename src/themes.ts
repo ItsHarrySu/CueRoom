@@ -20,7 +20,7 @@ export const THEMES = [
   {
     id: 'studio',
     label: 'Studio',
-    description: 'Charcoal surfaces and amber controls.',
+    description: 'Obsidian surfaces and acid-lime cue controls.',
   },
   {
     id: 'paper',

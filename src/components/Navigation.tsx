@@ -11,8 +11,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AuthOverlay, useAuthProfileReady, signOut } from 'deepspace'
-import { ChevronDown, LogOut, Menu, X } from 'lucide-react'
-import { Brand } from '../cueroom/UI'
+import { ChevronDown, Grid2X2, LogOut, Menu, MoreHorizontal, X } from 'lucide-react'
+import { Brand } from './Brand'
 import type { Role } from '../constants'
 import { nav } from '../nav'
 import { cn } from '../lib/utils'
@@ -50,6 +50,7 @@ export default function Navigation() {
     return item.roles.includes(userRole as Role)
   })
 
+  const roomView = location.pathname.startsWith('/rooms/') && isSignedIn
   const navLink = (item: (typeof nav)[number]) => {
     const active = location.pathname.startsWith(item.path)
     return (
@@ -69,13 +70,14 @@ export default function Navigation() {
 
   return (
     <>
-      <nav data-testid="app-navigation" className="border-b border-border bg-background">
-        <div className="mx-auto flex h-12 max-w-7xl items-center gap-4 px-4">
+      <nav data-room-view={roomView} data-testid="app-navigation" className="border-b border-border bg-background">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4">
           <Link to="/home" className="text-sm font-semibold text-foreground">
-            <Brand/>
+            {roomView ? <span className="room-wordmark"><b aria-hidden>◉</b><Grid2X2 aria-hidden size={16} /> CueRoom</span> : <Brand />}
           </Link>
 
-          <div className="hidden items-center md:flex">{visibleNav.map(navLink)}</div>
+          <span className="nav-path">{location.pathname.startsWith('/rooms/') ? 'Setlist planner' : location.pathname === '/home' ? 'Workspace' : 'Account'}</span>
+          <div className="nav-links hidden items-center md:flex">{visibleNav.map(navLink)}</div>
 
           <div className="flex-1" />
 
@@ -94,6 +96,7 @@ export default function Navigation() {
                     aria-label="Account menu"
                     className="group flex items-center gap-2 rounded-full border border-border bg-card/60 py-1 pl-1 pr-2.5 text-sm transition-colors hover:bg-card"
                   >
+                    {roomView && <MoreHorizontal className="room-overflow" size={20} />}
                     <Avatar className="h-6 w-6 ring-1 ring-inset ring-border">
                       <AvatarImage src={user.imageUrl ?? undefined} referrerPolicy="no-referrer" />
                       <AvatarFallback className="text-[11px]">
@@ -114,6 +117,7 @@ export default function Navigation() {
                 }
               />
               <DropdownMenuContent align="end" className="w-56">
+                {roomView && visibleNav.map(item => <DropdownMenuItem key={item.path} render={<Link to={item.path} />}>{item.label}</DropdownMenuItem>)}
                 <DropdownMenuLabel>
                   <div className="truncate font-medium text-foreground">
                     {user.name || 'Signed in'}
@@ -142,14 +146,14 @@ export default function Navigation() {
             </button>
           )}
 
-          <button
+          {!roomView && <button
             className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground md:hidden"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle menu"
             aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <X className="h-4 w-4" aria-hidden /> : <Menu className="h-4 w-4" aria-hidden />}
-          </button>
+          </button>}
         </div>
 
         {mobileMenuOpen && (

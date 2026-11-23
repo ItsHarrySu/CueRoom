@@ -43,7 +43,10 @@ function Dashboard() {
   return (
     <section className="studio">
       <div className="section-head">
-        <h1>Your rooms</h1>
+        <div>
+          <span className="caption">Your workspace</span>
+          <h1>Your rooms</h1>
+        </div>
         <div className="tools">
           <Button variant="outline" onClick={() => setDialog('Join room')}>
             Join room
@@ -57,17 +60,21 @@ function Dashboard() {
       <ReadState {...rooms} />
       {rooms.status === 'ready' &&
         (list.length ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="room-grid">
             {list.map((r) => (
               <Link className="room-card" key={r.recordId} to={'/rooms/' + r.recordId}>
                 <Disc3 aria-hidden />
-                <strong className="flex-1">{r.data.name}</strong>
+                <div>
+                  <small className="caption">Setlist room</small>
+                  <strong>{r.data.name}</strong>
+                </div>
                 <ArrowUpRight aria-hidden />
               </Link>
             ))}
           </div>
         ) : (
-          <div className="panel">
+          <div className="panel empty-panel">
+            <Disc3 aria-hidden />
             <h2 className="text-xl font-semibold">Your first set starts here</h2>
             <p>Create a room for your set, or join one with an invitation.</p>
           </div>
