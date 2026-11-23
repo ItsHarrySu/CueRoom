@@ -93,6 +93,24 @@ async function reconcile(tools: ActionTools, roomId: string, trackId?: string, a
   return false
 }
 
+async function compensateOverflow(tools: ActionTools, roomId: string, created: string, userId: string) {
+  try {
+    const track = await read(tools, 'tracks', created)
+    if (track !== null) {
+      if (track.roomId !== roomId || track.addedBy !== userId) return false
+      try {
+        await tools.remove('tracks', created)
+      } catch {
+        // A lost acknowledgement can follow a committed delete.
+      }
+      if (await read(tools, 'tracks', created) !== null) return false
+    }
+    return await reconcile(tools, roomId, created) === true
+  } catch {
+    return false
+  }
+}
+
 type Operation = 'add' | 'update' | 'delete'
 function action(op: Operation): ActionHandler<Env> {
   return async ({ userId, callerJwt, params, tools }) => {
@@ -128,13 +146,8 @@ function action(op: Operation): ActionHandler<Env> {
         }
         const outcome = await reconcile(tools, roomId, created, true)
         if (outcome === 'over-capacity') {
-          // Scope compensation to this call's acknowledged row and verified creator.
-          try {
-            await tools.deleteWhere('tracks', { recordId: created, roomId, addedBy: userId }, 1)
-          } catch {
-            // Reconcile even if cleanup committed without an acknowledgement.
-          }
-          if (await reconcile(tools, roomId, created) === true) return fail('Room track limit reached.')
+          const cleaned = await compensateOverflow(tools, roomId, created, userId)
+          return fail(cleaned ? 'Room track limit reached.' : 'Track cleanup requires reconciliation.')
         }
         return outcome === true ? success(created) : fail('Track order requires reconciliation.')
       }

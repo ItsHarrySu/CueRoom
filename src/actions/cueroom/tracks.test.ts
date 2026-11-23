@@ -34,15 +34,10 @@ function fixture() {
     return ok({ recordId: k })
   })
   const remove = vi.fn(async (_: string, k: string) => {
-    tracks.delete(k)
+    if (!tracks.delete(k)) return missing
     return ok({ deleted: true })
   })
-  const deleteWhere = vi.fn(async (_: string, where: Data) => {
-    const row = tracks.get(String(where.recordId))
-    if (row?.addedBy === where.addedBy && row?.roomId === where.roomId) tracks.delete(String(where.recordId))
-    return ok({ deleted: 1 })
-  })
-  const tools = { get, query, create, update, remove, deleteWhere }
+  const tools = { get, query, create, update, remove }
   const call = (name: string, params: unknown, userId = 'alice', callerJwt = 'verified') =>
     actions[name]({ params, tools, userId, callerJwt } as unknown as ActionContext<Env>)
   const add = () => call('addTrack', { roomId: 'room', track })
@@ -120,19 +115,67 @@ it('accepts only one competing local addition at 199 live tracks', async () => {
   expect(f.tracks.size).toBe(200)
 })
 
-it('compensates its own addition when an external writer takes the last slot', async () => {
+function overflowFixture() {
   const f = fixture()
   for (let i = 0; i < 199; i++) f.tracks.set(String(i), stored)
   f.create.mockImplementationOnce(async (_, data) => {
     f.tracks.set('other', stored)
     f.tracks.set('new', data)
+    f.room.trackOrder = ['other', 'new', '0', 'new']
     return ok({ recordId: 'new' })
   })
+  return f
+}
+
+it('compensates its own addition when an external writer takes the last slot', async () => {
+  const f = overflowFixture()
   expect((await f.add()).error).toMatch(/limit/)
   expect(f.tracks.size).toBe(200)
   expect(f.room.trackOrder).toContain('other')
   expect(f.room.trackOrder).not.toContain('new')
 })
+
+it.each(['creator', 'room', 'envelope'])('refuses compensation for a mismatched %s', async mismatch => {
+  const f = overflowFixture()
+  const get = f.get.getMockImplementation()!
+  f.get.mockImplementation(async (collection, key) => {
+    if (collection === 'tracks') {
+      const row = f.tracks.get(key)!
+      if (mismatch === 'creator') row.addedBy = 'bob'
+      if (mismatch === 'room') row.roomId = 'foreign'
+      if (mismatch === 'envelope') return ok({ record: { recordId: 'other', data: row } })
+    }
+    return get(collection, key)
+  })
+  expect(await f.add()).toEqual({ success: false, error: 'Track cleanup requires reconciliation.' })
+  expect(f.remove).not.toHaveBeenCalled()
+  expect(f.tracks.size).toBe(201)
+})
+
+it.each(['refused', 'lost acknowledgement', 'unconfirmed absence', 'order failure'])(
+  'checks persisted cleanup after %s', async mode => {
+    const f = overflowFixture()
+    f.remove.mockImplementationOnce(async (_, key) => {
+      if (mode === 'refused') return failure
+      f.tracks.delete(key)
+      if (mode === 'unconfirmed absence') f.get.mockResolvedValueOnce({ ...missing, data: {} })
+      if (mode === 'order failure') f.update.mockResolvedValue(failure)
+      throw Error(failure.error)
+    })
+    const result = await f.add()
+    expect(f.remove.mock.calls).toEqual([['tracks', 'new']])
+    expect(f.get.mock.calls.filter(([collection]) => collection === 'tracks')).toEqual([['tracks', 'new'], ['tracks', 'new']])
+    expect(f.tracks.has('other')).toBe(true)
+    expect(result.success).toBe(false)
+    if (mode === 'lost acknowledgement') {
+      expect(result.error).toMatch(/limit/)
+      expect(f.room.trackOrder.slice(0, 2)).toEqual(['other', '0'])
+      expect(f.room.trackOrder).not.toContain('new')
+      expect(f.room.trackOrder).toHaveLength(200)
+    } else {
+      expect(result.error).toBe('Track cleanup requires reconciliation.')
+    }
+  })
 
 it('recovers from lost delete acknowledgement and a failed first order write', async () => {
   const f = fixture()
