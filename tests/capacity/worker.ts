@@ -1,0 +1,63 @@
+// Local workerd fixture. Only this test entry point exposes seeding and SQL inspection.
+import { Hono } from 'hono'
+import { AppRecordRoom } from '../../src/server/app-record-room'
+import { registerActionRoutes } from '../../src/server/action-routes'
+import { registerRealtimeRoutes } from '../../src/server/realtime-routes'
+import { resolveAuth } from '../../src/server/http-routes'
+import type { AppContext, Env } from '../../worker'
+
+export class FixtureRoom extends AppRecordRoom {
+  constructor(state: DurableObjectState, env: Env) {
+    const sql = state.storage.sql
+    if (!sql.exec("SELECT 1 FROM sqlite_master WHERE name='c_tracks'").toArray().length) {
+      sql.exec(
+        'CREATE TABLE c_tracks (_row_id TEXT PRIMARY KEY, _created_by TEXT, _created_at TEXT, _updated_at TEXT, col_roomid TEXT, col_title TEXT, col_artist TEXT, col_addedby TEXT)',
+      )
+      const count = state.id.name === 'overflow' ? 201 : 199
+      for (let i = 0; i < count; i++)
+        sql.exec(
+          "INSERT INTO c_tracks VALUES (?, 'alice','old','old','room','Legacy','Artist','alice')",
+          'legacy-' + i,
+        )
+      if (state.id.name === 'duplicates') {
+        sql.exec('ALTER TABLE c_tracks ADD COLUMN col_capacityslot REAL')
+        sql.exec('ALTER TABLE c_tracks ADD COLUMN col_creationtoken TEXT')
+        sql.exec('UPDATE c_tracks SET col_capacityslot=1, col_creationtoken=_row_id')
+      }
+      if (state.id.name === 'wrong-index')
+        sql.exec('CREATE INDEX uniq_c_tracks_roomId_capacitySlot ON c_tracks(col_roomid)')
+    }
+    super(state, env)
+  }
+  override async fetch(req: Request) {
+    if (new URL(req.url).pathname === '/inspect') {
+      const rows = this.sql.exec(await req.text()).toArray()
+      return Response.json(rows)
+    }
+    if (new URL(req.url).pathname === '/cold') this.state.abort('test cold restart')
+    if (req.url.endsWith('/api/tools/execute')) {
+      const { tool, params } = (await req.clone().json()) as {
+        tool: string
+        params: { data?: { title?: string } }
+      }
+      if (tool === 'records.create' && params.data?.title === 'Lose reply') {
+        await super.fetch(req)
+        return new Response('Simulated lost acknowledgement', { status: 503 })
+      }
+    }
+    return super.fetch(req)
+  }
+}
+
+const app = new Hono<AppContext>()
+app.onError((error, c) => c.json({ success: false, error: error.message }, 500))
+registerActionRoutes(app, resolveAuth)
+registerRealtimeRoutes(app)
+app.all('/fixture/:scope/*', (c) => {
+  const url = new URL(c.req.url)
+  url.pathname = url.pathname.replace(/^\/fixture\/[^/]+/, '')
+  return c.env.RECORD_ROOMS.get(c.env.RECORD_ROOMS.idFromName(c.req.param('scope'))).fetch(
+    new Request(url, c.req.raw),
+  )
+})
+export default app

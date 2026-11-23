@@ -164,8 +164,8 @@ export function registerAuthAndIntegrationRoutes(app: Hono<AppContext>): void {
 
   // Debug proxy → app's RecordRoom DO.
   //
-  // Both this proxy and the DO gate on ALLOW_DEBUG_ROUTES === "true". The app
-  // proxy also requires the existing owner/admin role before reaching the DO.
+  // The proxy checks opt-in and admin identity. CueRoom's RecordRoom also
+  // disables SDK debug handlers because raw SQL can remove capacity guards.
   app.all('/api/debug/*', async (c) => {
     if (c.env.ALLOW_DEBUG_ROUTES !== 'true') {
       return c.notFound()

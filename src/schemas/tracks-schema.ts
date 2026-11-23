@@ -3,8 +3,11 @@ import type { CollectionSchema } from 'deepspace/schema'
 export const tracksSchema: CollectionSchema = {
   name: 'tracks',
   teamField: 'roomId',
+  uniqueOn: ['roomId', 'capacitySlot'],
   columns: [
     { name: 'roomId', storage: 'text', interpretation: 'plain', required: true, immutable: true },
+    { name: 'capacitySlot', storage: 'number', interpretation: 'plain', required: true, immutable: true },
+    { name: 'creationToken', storage: 'text', interpretation: 'plain', required: true, immutable: true },
     { name: 'title', storage: 'text', interpretation: 'plain', required: true },
     { name: 'artist', storage: 'text', interpretation: 'plain', required: true },
     { name: 'bpm', storage: 'number', interpretation: 'plain' },

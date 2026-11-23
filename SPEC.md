@@ -15,7 +15,7 @@ Retain the generated users and settings schemas and their permissions in src/sch
 | Collection | Record data | Identity |
 | --- | --- | --- |
 | rooms | roomId: string, name: string, ownerId: string, inviteToken: string, trackOrder: string[] | recordId equals roomId, which also serves as the team ID |
-| tracks | roomId: string, title: string, artist: string, bpm?: number or null, musicalKey?: string or null, energy?: number or null, addedBy: string | Each record belongs to exactly one room |
+| tracks | roomId: string, title: string, artist: string, bpm?: number or null, musicalKey?: string or null, energy?: number or null, addedBy: string, capacitySlot: integer, creationToken: string | Each record belongs to exactly one room |
 | team_members | teamId: string, userId: string, status: "active" | Exactly one record per (teamId, userId) pair |
 
 ## Security
@@ -55,6 +55,11 @@ type TrackPatch = Partial<TrackInput>
 ## Validation
 
 Reject malformed requests on the server before writing. Validate identifiers, object types and allowed fields. Require trimmed room names of 1–80 characters and trimmed track titles and artists of 1–120 each. BPM must be finite and within 40–240 inclusive, musical key at most 16 characters, and energy an integer from 1 through 5. Optional fields accept null to clear. Omitted patch fields retain their values. Reject empty patches. Enforce a maximum of 200 live tracks per room, including concurrent additions.
+
+Every live track has an immutable server-owned slot from 0 through 199. A physical SQLite unique index on (roomId, capacitySlot) and storage triggers enforce the ceiling in the shared RecordRoom. Slot reuse after deletion has no effect on setlist order. On cold start the RecordRoom fences incoming events, verifies the index, and audits or migrates legacy rows before serving writes. Over-capacity or inconsistent data requires explicit reconciliation.
+
+The add action generates independent cryptographic UUIDs for the record ID and immutable creation token. A create colliding with a different stored marker cannot overwrite that track. SDK 0.44.2 still performs upserts and can edit a record if its marker is omitted or repeated. UUID uniqueness is probabilistic. Only a definite slot conflict permits a new attempt with fresh identifiers. After a lost reply, the action verifies the original ID and marker without resubmitting the create. A new client request is a separate operation. Track creation and canonical order updates are separate writes.
+
 
 ## Ordering and synchronization
 
