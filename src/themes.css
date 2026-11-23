@@ -47,13 +47,17 @@
 
 [data-theme="studio"] {
   color-scheme: dark;
-  --color-background: #111313;
-  --color-card: #1c1f1e;
+  --color-background: #101110;
+  --color-foreground: #f0f1eb;
+  --color-muted: #292d28;
+  --color-accent: #31372e;
+  --color-secondary: #292d28;
+  --color-card: #191b19;
   --color-popover: #202422;
-  --color-primary: #ffbd59;
-  --color-primary-foreground: #20190e;
+  --color-primary: #c5f46a;
+  --color-primary-foreground: #18200e;
   --color-border: #393e3a;
   --color-input: #505650;
-  --color-ring: #ffbd59;
+  --color-ring: #c5f46a;
   --color-muted-foreground: #afb5ad;
 }

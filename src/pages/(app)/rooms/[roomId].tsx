@@ -113,13 +113,16 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
   const { ready } = useMutations('tracks')
   async function move(index: number, destination: number) {
     if (!ready || moving || destination < 0 || destination >= rows.length) return
-    const orderedTrackIds = rows.map(row => row.recordId)
+    const orderedTrackIds = rows.map((row) => row.recordId)
     orderedTrackIds.splice(destination, 0, ...orderedTrackIds.splice(index, 1))
     setMoving(true)
     try {
       await act('reorderTracks', { roomId, orderedTrackIds })
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Order unconfirmed.', 'Refreshing the setlist before retry.')
+      toast.error(
+        e instanceof Error ? e.message : 'Order unconfirmed.',
+        'Refreshing the setlist before retry.',
+      )
     } finally {
       refresh()
     }
@@ -141,23 +144,32 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
       </Link>
       <div className="section-head mt-4">
         <div>
+          <span className="caption">Setlist workspace</span>
           <h1>{room.name}</h1>
-          <span className="meta">
-            Setlist workspace{query.status === 'ready' && ' · ' + rows.length + ' tracks'}
-          </span>
         </div>
         <div className="tools">
           <Button disabled={!uuid.test(room.inviteToken)} variant="outline" onClick={share}>
             <Link2 />
             Copy invitation
           </Button>
-          <Button disabled={moving || query.status !== 'ready'} onClick={() => setEdit({ kind: 'add' })}>
+          <Button
+            disabled={moving || query.status !== 'ready'}
+            onClick={() => setEdit({ kind: 'add' })}
+          >
             <Plus />
             Add track
           </Button>
         </div>
       </div>
-      <div className="panel">
+      <div className="panel sheet">
+        <header className="sheet-head">
+          <h2>Running order</h2>
+          {query.status === 'ready' && (
+            <span className="meta">
+              {rows.length} {rows.length === 1 ? 'track' : 'tracks'}
+            </span>
+          )}
+        </header>
         <ReadState {...query} />
         {query.status === 'ready' &&
           (rows.length ? (
@@ -169,51 +181,49 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
                     <strong>{row.data.title}</strong>
                     <div className="text-muted-foreground">{row.data.artist}</div>
                   </div>
-                  <span className="meta">
-                    {[
-                      typeof row.data.bpm === 'number' && row.data.bpm + ' BPM',
-                      typeof row.data.musicalKey === 'string' && row.data.musicalKey,
-                      typeof row.data.energy === 'number' && 'Energy ' + row.data.energy + '/5',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={'Move ' + row.data.title + ' up'}
-                    disabled={moving || !ready || i === 0}
-                    onClick={() => move(i, i - 1)}
-                  >
-                    <ArrowUp />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={'Move ' + row.data.title + ' down'}
-                    disabled={moving || !ready || i === rows.length - 1}
-                    onClick={() => move(i, i + 1)}
-                  >
-                    <ArrowDown />
-                  </Button>
-                  <Button
-                    disabled={moving}
-                    size="icon"
-                    variant="ghost"
-                    aria-label={'Edit ' + row.data.title}
-                    onClick={() => setEdit({ kind: 'edit', row })}
-                  >
-                    <Pencil />
-                  </Button>
-                  <Button
-                    disabled={moving}
-                    size="icon"
-                    variant="ghost"
-                    aria-label={'Delete ' + row.data.title}
-                    onClick={() => setEdit({ kind: 'delete', row })}
-                  >
-                    <Trash2 />
-                  </Button>
+                  <div className="track-details">
+                    {typeof row.data.bpm === 'number' && <span>{row.data.bpm} BPM</span>}
+                    {row.data.musicalKey && <span>Key {row.data.musicalKey}</span>}
+                    {typeof row.data.energy === 'number' && <span>Energy {row.data.energy}/5</span>}
+                  </div>
+                  <div className="row-tools">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={'Move ' + row.data.title + ' up'}
+                      disabled={moving || !ready || i === 0}
+                      onClick={() => move(i, i - 1)}
+                    >
+                      <ArrowUp />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={'Move ' + row.data.title + ' down'}
+                      disabled={moving || !ready || i === rows.length - 1}
+                      onClick={() => move(i, i + 1)}
+                    >
+                      <ArrowDown />
+                    </Button>
+                    <Button
+                      disabled={moving}
+                      size="icon"
+                      variant="ghost"
+                      aria-label={'Edit ' + row.data.title}
+                      onClick={() => setEdit({ kind: 'edit', row })}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      disabled={moving}
+                      size="icon"
+                      variant="ghost"
+                      aria-label={'Delete ' + row.data.title}
+                      onClick={() => setEdit({ kind: 'delete', row })}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ol>

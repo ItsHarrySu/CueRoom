@@ -13,7 +13,11 @@ Plans is the Lead Architect. Dependencies below are planning prerequisites. Plan
 | CR-007 Frontend dashboard and setlist editor | Codex | Implemented, pending Plans review | CR-002, CR-005, CR-006 | Public landing, authenticated room dashboard, invitation handling and track editor | Live multi-user verification pending. |
 | CR-008 Data subscriptions and collaborative ordering | Codex | Awaiting Plans review | CR-004, CR-006, CR-007 | Verified reorder action, editor controls, unit coverage and two-session Playwright scenario | Authenticated browser run pending |
 | CR-009 Multi-user authorization and integration tests | Codex | Awaiting authenticated run and Plans review | CR-005 through CR-008 | Three-account suite and local results below | Backend security review pending |
-| CR-010 Deployment, production verification and submission | Unassigned | Pending | CR-003, CR-009 | — | — |
+| CR-010 Premium visual and UX redesign | Codex | Pending Plans review | CR-009 | Landing, workspace and setlist editor redesign | — |
+| CR-011 Advanced setlist features | Unassigned | Pending | CR-010 | — | — |
+| CR-012 Selective integration and polish | Unassigned | Pending | CR-011 | — | — |
+| CR-013 Production deployment and verification | Unassigned | Pending | CR-012 | — | Backend security sign-off pending |
+| CR-014 Assessment submission | Unassigned | Pending | CR-013 | — | — |
 
 ## CR-004 review notes
 
