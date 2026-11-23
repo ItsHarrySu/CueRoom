@@ -22,6 +22,20 @@ function fixture() {
   return { get, create, remove, query, call, join: () => call('joinRoom', { roomId: 'room', inviteToken: secret }) }
 }
 
+it.each(['createRoom', 'joinRoom'])('fails closed on unexpected room lookup responses for %s', async action => {
+  const f = fixture()
+  const params = action === 'createRoom' ? { name: 'Set' } : { roomId: 'room', inviteToken: secret }
+  for (const response of [failure, { error: 'Record not found' }, { ...missing, data: {} }, null]) {
+    f.get.mockResolvedValueOnce(response)
+    expect((await f.call(action, params)).success).toBe(false)
+  }
+  f.get.mockImplementationOnce(async (_, recordId) => ok({ record: { recordId, data: null } }))
+  expect((await f.call(action, params)).success).toBe(false)
+  expect(f.create).not.toHaveBeenCalled()
+  expect(f.query).not.toHaveBeenCalled()
+  expect(f.remove).not.toHaveBeenCalled()
+})
+
 describe('createRoom', () => {
   it('reserves owner membership before writing the trimmed room and returns only its ID', async () => {
     const f = fixture()
@@ -32,6 +46,20 @@ describe('createRoom', () => {
       ['team_members', { teamId: id, userId: 'alice', status: 'active' }],
       ['rooms', { roomId: id, ownerId: 'alice', name: 'Set', inviteToken: expect.any(String), trackOrder: [] }, id],
     ])
+  })
+
+  it('creates distinct bare UUIDv4 room IDs for the same verified owner', async () => {
+    const f = fixture()
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    const ids = []
+    for (let i = 0; i < 2; i++) {
+      const result = await f.call('createRoom', { name: 'Set' })
+      const id = f.get.mock.calls[i][1]
+      expect(id).toMatch(uuid)
+      expect(result).toEqual(ok({ roomId: id }))
+      ids.push(id)
+    }
+    expect(ids[0]).not.toBe(ids[1])
   })
 
   it.each([null, [], { name: 1 }, { name: ' ' }, { name: 'x'.repeat(81) }, { name: 'x', ownerId: 'bob' }])(

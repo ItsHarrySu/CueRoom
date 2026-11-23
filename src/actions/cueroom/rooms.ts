@@ -1,4 +1,4 @@
-import type { ActionHandler, ActionTools } from 'deepspace/worker'
+import { RECORD_NOT_FOUND, type ActionHandler, type ActionTools } from 'deepspace/worker'
 import type { Env } from '../../../worker'
 
 const fail = (error: string) => ({ success: false as const, error })
@@ -12,8 +12,14 @@ function fields(params: unknown, keys: string[]): boolean {
 
 async function readRoom(tools: ActionTools, id: string) {
   const result = await tools.get('rooms', id)
-  if (result.success && result.data.record.recordId === id) return result.data.record.data
-  if (!result.success && result.error === 'Record not found') return null
+  // SDK 0.44.2 readRecord returns this sentinel when the schema-backed SELECT finds no row.
+  if (result.success === false && result.error === RECORD_NOT_FOUND && result.data === undefined) return null
+  if (result.success === true && result.error === undefined) {
+    const record = result.data?.record
+    if (record?.recordId === id && record.data && typeof record.data === 'object' && !Array.isArray(record.data)) {
+      return record.data
+    }
+  }
   throw new Error('Room lookup failed')
 }
 
@@ -23,11 +29,7 @@ export const createRoom: ActionHandler<Env> = async ({ userId, callerJwt, params
   const name = params.name.trim()
   if (!name || [...name].length > 80) return fail('Invalid room name.')
 
-  // Scope random IDs by creator. Even concurrent identical random draws then
-  // compete for the same unique (teamId, userId) reservation before any upsert.
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userId))
-  const scope = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-  const roomId = scope + '-' + crypto.randomUUID()
+  const roomId = crypto.randomUUID()
   const inviteToken = crypto.randomUUID()
   let memberId: string
   try {
