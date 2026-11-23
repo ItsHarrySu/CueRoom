@@ -28,15 +28,9 @@
  */
 
 import type { Hono } from 'hono'
-import {
-  apiWorkerFetch,
-  lookupOwn,
-  normalizeApiError,
-  splitIntegrationEndpoint,
-} from 'deepspace/worker'
+import { lookupOwn } from 'deepspace/worker'
 import type { ActionResult, ActionTools, VerifyResult } from 'deepspace/worker'
 import { actions } from '../actions/index.js'
-import { integrations } from '../integrations.js'
 import type { AppContext, Env } from '../../worker.js'
 
 type ResolveAuth = (req: Request, env: Env) => Promise<VerifyResult | null>
@@ -45,15 +39,11 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
   app.post('/api/actions/:name', async (c) => {
     const auth = await resolveAuth(c.req.raw, c.env)
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)
-    // `resolveAuth` may accept a cookie session, which carries no bearer token
-    // — and `VerifyResult` exposes the claims, not the raw JWT. Actions need
-    // the token itself (user-billed integrations forward it), so a call
-    // without one is refused as an auth failure, next to the check above,
-    // rather than crashing on a missing header further down.
+    // Action handlers receive the caller's bearer token as part of their contract.
     const authHeader = c.req.header('Authorization') ?? ''
     const callerJwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
     if (!callerJwt) return c.json({ error: 'Unauthorized' }, 401)
-    // Who called: actions run RBAC-off and can bill the owner, and the
+    // Who called: actions run RBAC-off, and the
     // platform's request log carries no user — this line is the attribution.
     // The name is a decoded path segment, so it is quoted, never interpolated raw.
     console.info(`[action] ${JSON.stringify(c.req.param('name'))} caller=${auth.userId}`)
@@ -63,13 +53,13 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
     const action = lookupOwn(actions, name)
     if (!action) return c.json({ error: 'Action not found' }, 404)
     const params = await c.req.json<Record<string, unknown>>()
-    const tools = createActionTools(c.env, auth.userId, callerJwt)
+    const tools = createActionTools(c.env, auth.userId)
     const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
     return c.json(result as unknown as Record<string, unknown>)
   })
 }
 
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
+function createActionTools(env: Env, userId: string): ActionTools {
   const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
 
   // The DO returns ActionResult<unknown>; callers below supply the precise
@@ -92,49 +82,6 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
     return res.json() as Promise<ActionResult<TData>>
   }
 
-  async function callIntegration<T>(endpoint: string, data?: unknown): Promise<ActionResult<T>> {
-    // "name/endpoint", both plain identifiers: anything else could reach
-    // another api-worker route carrying the owner's token.
-    const target = splitIntegrationEndpoint(endpoint)
-    if (!target) {
-      return {
-        success: false,
-        code: 'invalid_integration_endpoint',
-        error: `Integration endpoint ${JSON.stringify(endpoint)} must be "<integration>/<endpoint>"`,
-      }
-    }
-    const integrationName = target.name
-    const billingMode = lookupOwn(integrations, integrationName)?.billing ?? 'developer'
-
-    // The api-worker bills the JWT subject: owner for developer mode, caller
-    // for user mode. It does not accept a client-supplied billing override.
-    const jwt = billingMode === 'developer' ? env.APP_OWNER_JWT : callerJwt
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${jwt}`,
-    }
-
-    // Composio files connections per app, so identify this app as the
-    // /api/integrations proxy does; otherwise an action looks for the user's
-    // connection in a different namespace. Pre-first-deploy there is no token:
-    // omit both and let the api-worker fail closed.
-    if (integrationName === 'composio' && env.APP_IDENTITY_TOKEN) {
-      headers['x-app-identity-token'] = env.APP_IDENTITY_TOKEN
-      headers['x-app-id'] = env.DEEPSPACE_APP_ID
-    }
-
-    const res = await apiWorkerFetch(env, target.path, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data ?? {}),
-    })
-    const payload = (await res.json()) as Record<string, unknown>
-    if (!res.ok || payload.success === false) {
-      return { success: false, ...normalizeApiError(res.status, payload) }
-    }
-    return payload as ActionResult<T>
-  }
-
   return {
     create: (collection, data, recordId) =>
       execTool('records.create', { collection, data, recordId }),
@@ -145,7 +92,11 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
       execTool('records.deleteWhere', { collection, where, limit }),
     get: (collection, recordId) => execTool('records.get', { collection, recordId }),
     query: (collection, options) => execTool('records.query', { collection, ...options }),
-    integration: callIntegration,
+    integration: async () => ({
+      success: false,
+      code: 'integration_disabled',
+      error: 'Integration execution is disabled',
+    }),
     registerUser: (options) => execTool('users.register', { ...options }),
   }
 }
