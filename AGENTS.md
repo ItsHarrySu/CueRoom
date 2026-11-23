@@ -49,3 +49,13 @@ reuses the current CLI login and requires no separate connection. If it reports
 headless shell without an action, run `npx deepspace auth login --help` and use
 the operator-supplied credential path it names; never invent credentials or put
 a password on the command line.
+
+## CueRoom Project Rules
+
+- Read SPEC.md and TASKS.md before implementation. Work within the assigned task boundaries and avoid duplicating another task's work.
+- Obtain approval from the Lead Architect (Plans chat) before changing shared contracts.
+- Keep dependencies and features within scope. Preserve SDK authentication, permissions, and worker plumbing.
+- Never expose or commit credentials.
+- Use task branches and descriptive commits. GitHub is the intended project source.
+- Deployment, pushing to DeepSpace source, and new app registration each require an explicitly authorized task.
+- Run appropriate verification commands. Report modified files, actual test results, architectural concerns, and blockers at the end of each task. Code written is evidence of implementation only. Claim verification only for checks actually performed.
