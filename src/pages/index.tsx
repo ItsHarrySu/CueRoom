@@ -1,50 +1,63 @@
-/**
- * Landing page — a STATIC page.
- *
- * It lives at the top level of src/pages/ (not under (app)/), so it renders
- * with no DeepSpace providers: no auth session fetch, no records WebSocket.
- * That makes it cheap to serve and safe for logged-out / crawler traffic.
- *
- * Need live data or auth here? Move this file to src/pages/(app)/index.tsx
- * and it becomes a dynamic page. Conversely, any page you want to keep static
- * (marketing, docs, legal) belongs at this top level.
- *
- * Top-level pages are also prerendered to static HTML at build
- * (prerender.ts, via vite.config.ts) so crawlers read real content.
- * Keep them renderable without a browser: no window/document during render,
- * prose in HTML text, reveal animations in CSS keyframes rather than JS-driven
- * initial states. `<Seo>` comes first and reads src/seo.ts.
- */
-
 import { Link } from 'react-router-dom'
+import { ArrowUpRight, Disc3 } from 'lucide-react'
 import { Seo } from '../components/Seo'
-import { APP_NAME } from '../constants'
 import { seo } from '../seo'
 
 export default function Landing() {
   return (
-    <>
+    <main data-testid="static-landing" className="landing">
       <Seo {...seo} path="/" />
-      <div
-        data-testid="static-landing"
-        className="flex min-h-screen flex-col items-center justify-center px-6 text-center"
-      >
-        <p className="mb-3 text-sm uppercase tracking-widest text-muted-foreground">{APP_NAME}</p>
-        <h1 className="mb-4 max-w-2xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          A DeepSpace app with a static front door
-        </h1>
-        <p className="mb-8 max-w-md text-muted-foreground">
-          This landing page ships no auth call and no realtime connection — it's a
-          plain static page. The live app, with sign-in and synced data, lives
-          behind the link below.
-        </p>
-        <Link
-          to="/home"
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          Enter the app
-        </Link>
+      <header>
+        <span className="wordmark">
+          <Disc3 aria-hidden /> CueRoom
+        </span>
+        <Link to="/home">Workspace ↗</Link>
+      </header>
+      <div className="hero">
+        <section>
+          <h1>
+            Build the set.
+            <br />
+            <em>Find the flow.</em>
+          </h1>
+          <p>
+            A shared setlist workspace for DJs. Bring your tracks together, compare tempos and keys,
+            and shape the night with your crew.
+          </p>
+          <Link className="cta" to="/home">
+            Open workspace <ArrowUpRight size={18} />
+          </Link>
+        </section>
+        <figure className="deck">
+          <figcaption>
+            Setlist preview <span>03 tracks</span>
+          </figcaption>
+          <h2>After hours</h2>
+          <div className="wave" aria-hidden>
+            {Array.from({ length: 72 }, (_, i) => (
+              <i
+                key={i}
+                style={{ height: 15 + Math.abs(Math.sin(i * 2.1) * Math.cos(i / 9)) * 80 + '%' }}
+              />
+            ))}
+          </div>
+          {[
+            ['Soft Focus', 'Mira Lane', '118', '8A'],
+            ['Night Transit', 'Lo Signal', '122', '9A'],
+            ['First Light', 'Index Duo', '124', '9B'],
+          ].map(([title, artist, bpm, key], i) => (
+            <div className="preview-row" key={title}>
+              <small>0{i + 1}</small>
+              <div>
+                <strong>{title}</strong>
+                <small>{artist}</small>
+              </div>
+              <small>{bpm} BPM</small>
+              <code>{key}</code>
+            </div>
+          ))}
+        </figure>
       </div>
-    </>
+    </main>
   )
 }

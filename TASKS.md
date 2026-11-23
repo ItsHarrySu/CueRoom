@@ -9,8 +9,8 @@ Plans is the Lead Architect. Dependencies below are planning prerequisites. Plan
 | CR-003 App registration and build verification | Unrecorded | Complete | CR-002 | Registration commit `6a41340`. Plans confirmed local TypeScript, production build, unit tests and lint passed. | — |
 | CR-004 Data schema and permission foundations | Codex | Complete | CR-002, CR-003 | Three collections registered. TypeScript, production build, 31 unit tests and lint passed. SDK schema lint returned zero warnings. | Approved and merged. Authenticated integration tests pending. |
 | CR-005 Room creation and invitation joining | Codex | Complete, pending live integration verification | CR-004 | Authenticated room actions and focused unit tests | Live multi-user verification pending. |
-| CR-006 Track CRUD and validation | Codex | Implemented, pending Plans review | CR-004, CR-005 | Authenticated actions and mocked RecordRoom tests | Live integration verification pending. |
-| CR-007 Frontend dashboard and setlist editor | Unassigned | Pending | CR-002 contracts, CR-005 and CR-006 for integration | — | — |
+| CR-006 Track CRUD and validation | Codex | Complete, pending live integration verification | CR-004, CR-005 | Authenticated actions and mocked RecordRoom tests | Live integration verification pending. |
+| CR-007 Frontend dashboard and setlist editor | Codex | Implemented, pending Plans review | CR-002, CR-005, CR-006 | Public landing, authenticated room dashboard, invitation handling and track editor | Live multi-user verification pending. |
 | CR-008 Data subscriptions and collaborative ordering | Unassigned | Pending | CR-004, CR-006, CR-007 for editor integration | — | — |
 | CR-009 Multi-user authorization and integration tests | Unassigned | Pending | CR-005 through CR-008 for full scenarios | — | — |
 | CR-010 Deployment, production verification and submission | Unassigned | Pending | CR-003, CR-009 | — | — |

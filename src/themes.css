@@ -44,3 +44,16 @@
   --color-shell: #fafafa;
   --color-shell-panel: #ffffff;
 }
+
+[data-theme="studio"] {
+  color-scheme: dark;
+  --color-background: #111313;
+  --color-card: #1c1f1e;
+  --color-popover: #202422;
+  --color-primary: #ffbd59;
+  --color-primary-foreground: #20190e;
+  --color-border: #393e3a;
+  --color-input: #505650;
+  --color-ring: #ffbd59;
+  --color-muted-foreground: #afb5ad;
+}
