@@ -98,6 +98,7 @@ export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
   AUTH_WORKER_URL: string
   /** Comma-separated exact Expo/native callback URIs (for example, myapp://auth/callback). */
   NATIVE_AUTH_REDIRECT_URIS?: string
+  INVITATION_QUOTA: D1Database
   APP_NAME: string
   /** Immutable record-scope and platform identity. */
   DEEPSPACE_APP_ID: string

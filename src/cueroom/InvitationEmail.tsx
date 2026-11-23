@@ -1,0 +1,42 @@
+import { useState } from 'react'
+import { Button, Input, Modal } from '@/components/ui'
+import { act } from './data'
+
+export function InvitationEmail({ roomId }: { roomId: string }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  return <>
+    <Button variant="outline" onClick={() => {
+      setConfirmation(crypto.randomUUID())
+      setMessage('')
+      setOpen(true)
+    }}>Send invitation email</Button>
+    {open && <Modal open onClose={() => { if (!busy) setOpen(false) }}>
+      <Modal.Title>Invite by email</Modal.Title>
+      <form className="grid gap-4" onSubmit={async event => {
+        event.preventDefault()
+        if (busy) return
+        const recipient = new FormData(event.currentTarget).get('recipient')
+        setBusy(true)
+        setMessage('')
+        try {
+          await act('sendInvitationEmail', { roomId, recipient, confirmation })
+          setMessage('Invitation accepted for delivery.')
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Invitation unavailable.')
+        } finally {
+          setBusy(false)
+        }
+      }}>
+        <p>Invite one collaborator. They must sign in and accept the room invitation.</p>
+        <label>Recipient email<Input type="email" name="recipient" required maxLength={254}
+          disabled={busy} placeholder="dj@example.com" /></label>
+        <p>Email delivery is disabled. You can still copy the invitation link.</p>
+        <p role="status">{message}</p>
+        <Button type="submit" disabled={busy}>{busy ? 'Checking invitation…' : 'Check invitation'}</Button>
+      </form>
+    </Modal>}
+  </>
+}

@@ -69,7 +69,7 @@ export function orderedTracks(rows: RecordData<Track>[], room: Room) {
   )
 }
 
-type Action = 'previewTransition' | 'createRoom' | 'joinRoom' | 'addTrack' | 'updateTrack' | 'deleteTrack' | 'reorderTracks'
+type Action = 'sendInvitationEmail' | 'previewTransition' | 'createRoom' | 'joinRoom' | 'addTrack' | 'updateTrack' | 'deleteTrack' | 'reorderTracks'
 export async function act(name: Action, params: Record<string, unknown>) {
   const token = await getAuthToken()
   if (!token) throw Error('Sign in again to continue.')
@@ -81,7 +81,7 @@ export async function act(name: Action, params: Record<string, unknown>) {
   const result = (await response.json()) as {
     success?: unknown
     error?: unknown
-    data?: { advice?: string; joined?: unknown; roomId?: string; trackId?: string }
+    data?: { accepted?: boolean; advice?: string; joined?: unknown; roomId?: string; trackId?: string }
   } | null
   if (!response.ok || result?.success !== true || result.error !== undefined)
     throw Error(
@@ -91,6 +91,7 @@ export async function act(name: Action, params: Record<string, unknown>) {
     )
   const data = result.data
   const confirmed =
+    name === 'sendInvitationEmail' ? data?.accepted === true :
     name === 'previewTransition' ? typeof data?.advice === 'string' && data.advice.length > 0 && data.advice.length <= 256 :
     name === 'joinRoom'
       ? data?.joined === true

@@ -74,3 +74,8 @@ bindings = [
 [dev]
 port = 8780
 inspector_port = 9237
+
+[[d1_databases]]
+binding = "INVITATION_QUOTA"
+database_name = "cueroom-invitation-quota"
+database_id = "auto"

@@ -6,4 +6,6 @@ import { addTrack, updateTrack, deleteTrack, reorderTracks } from './cueroom/tra
 
 import { previewTransition } from './cueroom/advisor.js'
 
-export const actions: Record<string, ActionHandler<Env>> = { previewTransition, createRoom, joinRoom, addTrack, updateTrack, deleteTrack, reorderTracks }
+import { sendInvitationEmail } from './cueroom/invitation-email.js'
+
+export const actions: Record<string, ActionHandler<Env>> = { sendInvitationEmail, previewTransition, createRoom, joinRoom, addTrack, updateTrack, deleteTrack, reorderTracks }

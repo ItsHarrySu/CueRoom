@@ -15,6 +15,7 @@ import {
 } from '@/cueroom/data'
 import { ActionForm, ReadState, SignIn } from '@/cueroom/UI'
 
+import { InvitationEmail } from '@/cueroom/InvitationEmail'
 import { TransitionPreview } from '@/cueroom/TransitionPreview'
 import { SetInsights } from '@/cueroom/SetInsights'
 import { summarize, validBpm, energyLevel } from '@/cueroom/insights'
@@ -169,6 +170,7 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
       <header className="room-heading">
         <div><h1>{room.name}</h1><p>Shared setlist workspace</p></div>
         <div className="room-actions">
+          {auth.userId && auth.userId === room.ownerId && <InvitationEmail roomId={roomId} />}
           <Button disabled={!uuid.test(room.inviteToken)} variant="outline" onClick={share} aria-label="Copy invitation">
             <span className="desktop-invite">Copy invitation</span><span className="mobile-invite">Invite</span>
           </Button>
