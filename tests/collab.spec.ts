@@ -15,6 +15,8 @@
  * persisted to `~/.deepspace/playwright-states/`), context creation, and
  * cleanup. No need to manage browser contexts manually.
  */
+import { storedRoom } from './helpers/stored-room'
+import type { WebSocketRoute } from '@playwright/test'
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
 
 // A machine that has never created test accounts is the normal state of a
@@ -133,7 +135,10 @@ test('API status page shows local retry after first-load API failure', async ({ 
 })
 
 test('members see track changes and persist a keyboard reorder across sessions', async ({ users }) => {
-  const [owner, member] = await users(2)
+  test.skip(usableTestAccounts < 3, 'Requires three distinct usable accounts for CR-009.')
+  test.setTimeout(120_000)
+  const [owner, member, outsider] = await users(3)
+  expect(new Set([owner.email, member.email, outsider.email]).size).toBe(3)
   const a = owner.page
   const b = member.page
   await a.goto('/home')
@@ -145,9 +150,47 @@ test('members see track changes and persist a keyboard reorder across sessions',
   await a.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(a.url()).origin })
   await a.getByRole('button', { name: 'Copy invitation' }).click()
   const invite = await a.evaluate(() => navigator.clipboard.readText())
+  const roomUrl = a.url()
+  const roomPath = new URL(roomUrl).pathname
+  const c = outsider.page
+  await c.goto('/home')
+  await expect(c.getByRole('heading', { name: 'Your rooms' })).toBeVisible()
+  await expect(c.locator('.room-card').first().or(c.getByText('Your first set starts here'))).toBeVisible()
+  await expect(c.locator('a[href="' + roomPath + '"]')).toHaveCount(0)
+  await c.goto(roomUrl)
+  await expect(c.getByRole('heading', { name: 'Room unavailable' })).toBeVisible()
+  await c.goto(roomUrl + '#invite=' + crypto.randomUUID())
+  await c.getByRole('button', { name: 'Accept invitation' }).click()
+  await expect(c.getByRole('alert')).toHaveText('Invalid room invitation.')
+  await c.goto(roomUrl)
+  await expect(c.getByRole('heading', { name: 'Room unavailable' })).toBeVisible()
+
+  let disconnected = false
+  const sockets = new Set<WebSocketRoute>()
+  await b.routeWebSocket(url => /^\/ws\/[^/]+$/.test(url.pathname), async socket => {
+    if (disconnected) {
+      await socket.close({ code: 1012 })
+      return
+    }
+    const server = socket.connectToServer()
+    sockets.add(socket)
+    socket.onClose(async (code, reason) => {
+      sockets.delete(socket)
+      await server.close({ code, reason })
+    })
+  })
   await b.goto(invite)
   await b.getByRole('button', { name: 'Accept invitation' }).click()
   await expect(b.getByText('An open setlist')).toBeVisible()
+
+  await b.goto(invite)
+  await b.getByRole('button', { name: 'Accept invitation' }).click()
+  await expect(b.getByText('An open setlist')).toBeVisible()
+
+  const members = storedRoom(roomPath.split('/').pop()!).members
+  expect(members).toHaveLength(2)
+  expect(new Set(members.map(row => row.col_userid)).size).toBe(2)
+  expect(members.every(row => row.col_status === 'active')).toBe(true)
 
   for (const title of ['Opening', 'Closing']) {
     await a.getByRole('button', { name: 'Add track' }).click()
@@ -169,4 +212,29 @@ test('members see track changes and persist a keyboard reorder across sessions',
   await b.getByRole('button', { name: 'Delete Closing' }).click()
   await b.getByRole('dialog').getByRole('button', { name: 'Delete track' }).click()
   await expect(titles(a)).toHaveText(['Encore'])
+
+  await b.getByRole('button', { name: 'Add track' }).click()
+  const memberDialog = b.getByRole('dialog')
+  await memberDialog.getByLabel('Title').fill('Interlude')
+  await memberDialog.getByLabel('Artist').fill('DJ')
+  await memberDialog.getByRole('button', { name: 'Add track' }).click()
+  await expect(titles(a)).toHaveText(['Encore', 'Interlude'])
+  await a.getByRole('button', { name: 'Move Interlude up' }).click()
+  await expect(titles(b)).toHaveText(['Interlude', 'Encore'])
+  await b.getByRole('button', { name: 'Edit Encore' }).click()
+  await memberDialog.getByLabel('Title').fill('Finale')
+  await memberDialog.getByRole('button', { name: 'Save changes' }).click()
+  await expect(titles(a)).toHaveText(['Interlude', 'Finale'])
+
+  disconnected = true
+  expect(sockets.size).toBeGreaterThan(0)
+  for (const socket of sockets) await socket.close({ code: 1012 })
+  await a.getByRole('button', { name: 'Delete Interlude' }).click()
+  await dialog.getByRole('button', { name: 'Delete track' }).click()
+  await expect(titles(a)).toHaveText(['Finale'])
+  disconnected = false
+  await expect(titles(b)).toHaveText(['Finale'], { timeout: 30_000 })
+  await Promise.all([a.reload(), b.reload()])
+  for (const page of [a, b]) await expect(titles(page)).toHaveText(['Finale'])
+  await expect(c.getByRole('heading', { name: 'Room unavailable' })).toBeVisible()
 })

@@ -12,7 +12,7 @@ Plans is the Lead Architect. Dependencies below are planning prerequisites. Plan
 | CR-006 Track CRUD and validation | Codex | Complete, pending live integration verification | CR-004, CR-005 | Authenticated actions and mocked RecordRoom tests | Live integration verification pending. |
 | CR-007 Frontend dashboard and setlist editor | Codex | Implemented, pending Plans review | CR-002, CR-005, CR-006 | Public landing, authenticated room dashboard, invitation handling and track editor | Live multi-user verification pending. |
 | CR-008 Data subscriptions and collaborative ordering | Codex | Awaiting Plans review | CR-004, CR-006, CR-007 | Verified reorder action, editor controls, unit coverage and two-session Playwright scenario | Authenticated browser run pending |
-| CR-009 Multi-user authorization and integration tests | Unassigned | Pending | CR-005 through CR-008 for full scenarios | — | — |
+| CR-009 Multi-user authorization and integration tests | Codex | Awaiting authenticated run and Plans review | CR-005 through CR-008 | Three-account suite and local results below | Backend security review pending |
 | CR-010 Deployment, production verification and submission | Unassigned | Pending | CR-003, CR-009 | — | — |
 
 ## CR-004 review notes
@@ -44,3 +44,57 @@ SDK 0.44.2 ActionTools sends each operation to RecordRoom separately and exposes
 The editor subscribes to rooms and tracks by roomId. RecordRoom checks socket identity and schema read permissions for changes, and the SDK reissues active queries on reconnect. Each render recomputes order from both snapshots, skipping duplicates and deleted IDs and appending omitted live IDs in ordinal order. Snapshots can arrive separately. Reorder uses connection readiness, renders subscribed data throughout submission, and resubscribes after the response. The SDK may display its prior snapshot while the fresh query is in flight.
 
 The Playwright scenario in tests/collab.spec.ts exercises add, edit, delete, keyboard reorder and persistence with two independent authenticated browsers. Run it locally with two usable DeepSpace test accounts. This workspace had zero usable accounts. Live collaboration and third-user denial remain pending CR-009 verification.
+
+## CR-009 verification
+
+Baseline `origin/main` was `fc97a9737938929c064ddfd6616e1bf61a495cb5`. Git confirmed CR-008 `073640165e9caa437ec81e2c791713185aa7ef22` is an ancestor. The lockfile installed DeepSpace 0.44.2. The changes affect tests and this task record.
+
+| Cloud check | Executed | Passed | Failed | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| Unit tests | 138 | 138 | 0 | 0 |
+| Playwright with local Vite and Chromium, diagnostic run | 8 | 7 | 1 | 9 |
+| SDK full suite | 0 | 0 | 0 | 0 |
+
+Type-check, build and lint passed. The SDK full-suite command stopped at CLI authentication before discovery. The standard Playwright server readiness check also timed out on `/api/auth/ok`. For the diagnostic run a temporary config used the local Vite root for readiness and retained the app, worker, assertions and zero retries. Six smoke cases and the API navigation case passed. The auth proxy check failed because the worker lacked a usable auth binding. The API navigation assertion only observes a mounted shell. A separate four-case static run passed and overlaps the diagnostic run. The SDK reported zero locally usable accounts. Playwright skipped four collaboration-file cases and five authorization/integrity cases.
+
+The three-account scenario covers both members performing every track operation, repeat invitation acceptance, a stored membership count, peer updates, socket loss and reconnect, and reload. The security tests compare restricted subscriptions with an owner read, exercise the existing-room actions, and require confirmed SDK direct writes to reject. Independent readback uses read-only Node SQLite access to the local Miniflare AppRecordRoom, including the real membership row ID. This fixture depends on the repository's current Wrangler state layout.
+
+Existing unit tests exercised SDK permission rules, action validation, duplicate joins, competing additions at capacity, stale permutations, failed acknowledgements and bounded reconciliation. The browser tests add persisted-state checks for the 200-track boundary and overlapping actions. A same-isolate guard rejects overlap. Separate isolates can still interleave across checks and writes. A reorder over the same set of IDs carries no version. The authenticated cases have yet to demonstrate live isolation, durable order, or recovery from disconnect. No reproducible application P0 was identified. Plans and Backend review remain pending, including acceptance of the cross-isolate limitations before production.
+
+### Windows PowerShell verification
+
+Use PowerShell 7.1 or later, Node 24 and npm 11.6 or later. From the repository directory, prepare the branch and authenticate the developer CLI.
+
+```powershell
+git fetch origin
+git switch codex/CR-009-integration-security
+npm ci
+npx playwright install chromium
+npx deepspace auth login
+npx deepspace test accounts list
+npx deepspace test accounts recover --all
+```
+
+If the pool has fewer than three usable accounts, create the missing accounts. The example creates three new ordinary test users. Use only the missing letters when topping up a pool. Enter a password of at least eight characters at each masked prompt.
+
+```powershell
+$pool = [guid]::NewGuid().ToString('N')
+foreach ($role in 'a','b','c') {
+  $email = "cr009-$pool-$role@deepspace.test"
+  Read-Host "Password for $email" -MaskInput | npx deepspace test accounts create --email $email --name "CR009-$role" --password-stdin
+  if ($LASTEXITCODE -ne 0) { throw "Account creation failed for $role" }
+}
+```
+
+Run the checks below. The SDK fixtures select the oldest usable accounts, so use a developer pool whose first three users are distinct ordinary members. The role that can read all rooms is unsuitable for C. The SDK stores the account registry and cached sessions in the developer profile. The tests create disposable rooms and tracks in local Wrangler state.
+
+```powershell
+node --input-type=module -e "import {loadAllTestAccounts as pool} from 'deepspace/testing'; console.log(pool().length); if(pool().length < 3) process.exit(1)"
+npm run type-check
+npm run build
+npm run test:unit
+npm run lint
+npm test -- all
+```
+
+Record the Playwright pass, fail and skip totals with the commit SHA for Plans. The full suite uses `all` because the default SDK command selects smoke and API specs.
