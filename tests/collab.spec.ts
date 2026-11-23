@@ -66,6 +66,8 @@ test('each browser renders its own signed-in account', async ({ users }) => {
 
 test('API status page renders loading success and error states', async ({ users }) => {
   const [user] = await users(1)
+  // Hold the successful response until the loading state has been observed.
+  const { promise: responseGate, resolve: releaseResponse } = Promise.withResolvers<void>()
   let shouldFail = false
   let requestCount = 0
 
@@ -80,7 +82,7 @@ test('API status page renders loading success and error states', async ({ users 
       return
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await responseGate
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -88,8 +90,12 @@ test('API status page renders loading success and error states', async ({ users 
     })
   })
 
-  await user.page.goto('/api-status')
-  await expect(user.page.getByText('Loading integration catalog...')).toBeVisible()
+  try {
+    await user.page.goto('/api-status', { waitUntil: 'domcontentloaded' })
+    await expect(user.page.getByText('Loading integration catalog...')).toBeVisible()
+  } finally {
+    releaseResponse()
+  }
   await expect(user.page.getByText('Integration catalog ready')).toBeVisible()
   await expect(user.page.getByText('2 integrations available.')).toBeVisible()
 
