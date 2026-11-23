@@ -18,9 +18,9 @@
 
 export const THEMES = [
   {
-    id: 'slate',
-    label: 'Slate',
-    description: 'Neutral dark placeholder default. Replace with your own theme.',
+    id: 'studio',
+    label: 'Studio',
+    description: 'Charcoal surfaces and amber controls.',
   },
   {
     id: 'paper',
@@ -33,9 +33,9 @@ export type ThemeId = (typeof THEMES)[number]['id']
 
 /** Read the currently active theme id from <html data-theme>. */
 export function getActiveTheme(): ThemeId {
-  if (typeof document === 'undefined') return 'slate'
+  if (typeof document === 'undefined') return 'studio'
   const id = document.documentElement.getAttribute('data-theme') as ThemeId | null
-  return id ?? 'slate'
+  return id ?? 'studio'
 }
 
 /** Look up a theme entry by id, or fall back to the first theme. */

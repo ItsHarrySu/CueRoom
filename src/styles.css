@@ -232,3 +232,32 @@
     touch-action: manipulation;
   }
 }
+
+.landing,.studio {max-width:76rem;margin:auto;padding:clamp(1.25rem,5vw,4rem);font-family:Inter,system-ui,sans-serif}
+.landing header,.wordmark,.cta,.tools,.deck figcaption,.section-head {display:flex;align-items:center;gap:.75rem}
+.landing header,.deck figcaption,.section-head {justify-content:space-between}
+.landing header {border-bottom:1px solid var(--color-border);padding-bottom:1.5rem}
+.wordmark {font-size:1.45rem;font-weight:750;letter-spacing:-.06em}
+.wordmark svg,.hero em,.deck code {color:var(--color-primary)}
+.hero {display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:center;padding:clamp(3rem,12vh,9rem) 0}
+.hero h1 {font-size:clamp(3.5rem,6.5vw,6.8rem);line-height:.97;letter-spacing:-.075em;font-weight:750}
+.hero em {font-weight:500;font-family:Georgia,serif}
+.hero p,.studio p {color:var(--color-muted-foreground);line-height:1.65;margin:.75rem 0 1.2rem}
+.hero p {max-width:32rem;font-size:1.1rem;margin:1.7rem 0}
+.cta {width:fit-content;background:var(--color-primary);color:var(--color-primary-foreground);padding:.8rem 1.3rem;border-radius:.6rem;font-weight:650}
+.cta:hover {filter:brightness(1.08)}
+.deck,.panel,.room-card {background:var(--color-card);border:1px solid var(--color-border);border-radius:1rem;padding:clamp(1.2rem,3vw,2rem)}
+.deck figcaption,.preview-row small,.meta {font: .78rem/1.5 ui-monospace,monospace;color:var(--color-muted-foreground)}
+.deck h2,.studio h1 {font-size:clamp(2rem,4vw,3.8rem);font-weight:650;letter-spacing:-.06em;overflow-wrap:anywhere}
+.wave {display:flex;gap:2px;align-items:center;height:4rem;margin:1rem 0;background:#151816;padding:.4rem;border-radius:.4rem}
+.wave i {flex:1;background:#e1a74e}
+.preview-row,.track-row {display:flex;align-items:center;gap:1rem;border-top:1px solid var(--color-border);padding:1rem 0}
+.preview-row div,.track-info {flex:1;min-width:0;overflow-wrap:anywhere}
+.preview-row small {display:block}
+.tools,.section-head {flex-wrap:wrap}
+.studio .section-head {margin-bottom:2rem}
+.studio label,form label {display:grid;gap:.4rem;font-size:.9rem}
+.room-card {display:flex;align-items:center;justify-content:space-between;gap:1rem;overflow-wrap:anywhere}
+.room-card:hover {border-color:var(--color-primary)}
+.track-row {flex-wrap:wrap}.track-info {min-width:8rem}
+@media(max-width:760px){.hero{grid-template-columns:1fr}.track-row{gap:.6rem}.studio{padding:1.25rem}}
