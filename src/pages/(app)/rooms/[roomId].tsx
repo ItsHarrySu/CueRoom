@@ -15,6 +15,9 @@ import {
 } from '@/cueroom/data'
 import { ActionForm, ReadState, SignIn } from '@/cueroom/UI'
 
+import { SetInsights } from '@/cueroom/SetInsights'
+import { summarize, validBpm, energyLevel } from '@/cueroom/insights'
+
 export default function RoomPage() {
   const { roomId = '' } = useParams()
   const { hash, search } = useLocation()
@@ -108,6 +111,11 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
   const query = useQuery<Track>('tracks', { where: { roomId }, limit: 201 })
   const rows = orderedTracks(query.records, room)
   const [edit, setEdit] = useState<Edit | null>(null)
+  const [selectedId, selectTrack] = useState<string | null>(null)
+  const [pane, setPane] = useState<'order' | 'insights'>('order')
+  const selected = Math.max(0, rows.findIndex(row => row.recordId === selectedId))
+  const tracks = rows.map(row => row.data)
+  const stats = summarize(tracks)
   const toast = useToast()
   const [moving, setMoving] = useState(false)
   const { ready } = useMutations('tracks')
@@ -138,10 +146,11 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
     }
   }
   return (
-    <section className="studio">
-      <Link className="text-muted-foreground" to="/home">
-        ← Your rooms
-      </Link>
+    <section className="studio room-workspace" data-pane={pane}>
+      <nav className="room-rail" aria-label="Room navigation">
+        <Link to="/home">← Your rooms</Link>
+        <strong aria-current="page">{room.name}</strong>
+      </nav>
       <div className="section-head mt-4">
         <div>
           <span className="caption">Setlist workspace</span>
@@ -153,7 +162,7 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
             Copy invitation
           </Button>
           <Button
-            disabled={moving || query.status !== 'ready'}
+            disabled={moving || rows.length >= 200 || query.status !== 'ready'}
             onClick={() => setEdit({ kind: 'add' })}
           >
             <Plus />
@@ -161,7 +170,18 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
           </Button>
         </div>
       </div>
-      <div className="panel sheet">
+      {query.status === 'ready' && <>
+        <dl className="set-summary">
+          <div><dt>Tracks</dt><dd>{stats.count} <small>/ 200</small></dd></div>
+          <div><dt>Average BPM</dt><dd>{stats.average === null ? 'Unavailable' : Number(stats.average.toFixed(1))}</dd></div>
+          <div><dt>BPM range</dt><dd>{stats.range?.join('–') ?? 'Unavailable'}</dd></div>
+        </dl>
+        <div className="pane-switch" role="group" aria-label="Workspace view">
+          <button aria-pressed={pane === 'order'} aria-controls="running-order" onClick={() => setPane('order')}>Running order</button>
+          <button aria-pressed={pane === 'insights'} aria-controls="set-insights" onClick={() => setPane('insights')}>Set insights</button>
+        </div>
+      </>}
+      <div id="running-order" className="panel sheet" data-ready={query.status === 'ready'}>
         <header className="sheet-head">
           <h2>Running order</h2>
           {query.status === 'ready' && (
@@ -175,16 +195,18 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
           (rows.length ? (
             <ol>
               {rows.map((row, i) => (
-                <li className="track-row" key={row.recordId}>
+                <li className="track-row" data-selected={i === selected} key={row.recordId}>
                   <span className="meta">{String(i + 1).padStart(2, '0')}</span>
-                  <div className="track-info">
+                  <button className="track-info text-left" aria-pressed={selected === i}
+                    aria-label={'Select ' + row.data.title + ' for transition analysis'}
+                    onClick={() => selectTrack(row.recordId)}>
                     <strong>{row.data.title}</strong>
-                    <div className="text-muted-foreground">{row.data.artist}</div>
-                  </div>
+                    <span className="text-muted-foreground">{row.data.artist}</span>
+                  </button>
                   <div className="track-details">
-                    {typeof row.data.bpm === 'number' && <span>{row.data.bpm} BPM</span>}
-                    {row.data.musicalKey && <span>Key {row.data.musicalKey}</span>}
-                    {typeof row.data.energy === 'number' && <span>Energy {row.data.energy}/5</span>}
+                    <span>{validBpm(row.data.bpm) ? row.data.bpm : '—'} BPM</span>
+                    <span className="recorded-key">Key {row.data.musicalKey || '—'}</span>
+                    <span>Energy {energyLevel(row.data.energy) ?? '—'}/5</span>
                   </div>
                   <div className="row-tools">
                     <Button
@@ -234,6 +256,7 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
             </>
           ))}
       </div>
+      {query.status === 'ready' && <SetInsights tracks={tracks} selected={selected} />}
       {edit && (
         <TrackDialog edit={edit} roomId={roomId} close={() => setEdit(null)} refresh={refresh} />
       )}
