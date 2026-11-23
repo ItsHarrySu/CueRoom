@@ -387,7 +387,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--color-ring); ou
 .track-actions summary::-webkit-details-marker { display: none; }
 .track-actions summary:focus-visible { outline: 2px solid var(--lime); }
 .track-actions[open] summary { background: var(--pane); color: var(--lime); }
-.track-actions .row-tools { z-index: 2; position: absolute; right: 8px; top: calc(100% - 4px); padding: 4px; background: #252a24; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 12px #0006; }
+.order-track:has(.track-actions[open]) { align-items: start; }
+/* Let the open controls grow their row. Align the toolbar's end with its trigger. */
+.track-actions .row-tools { position: relative; left: 100%; transform: translateX(-100%); width: max-content; padding: 4px; background: #252a24; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 12px #0006; }
 .order-help { margin-top: 16px; }
 .set-insights { min-width: 0; padding: 23px clamp(16px,2vw,28px); }
 .set-insights header strong { display: block; margin: 14px 0; }

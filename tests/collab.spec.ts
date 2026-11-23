@@ -201,9 +201,11 @@ test('members see track changes and persist a keyboard reorder across sessions',
     await dialog.getByLabel('Title').fill(title)
     await dialog.getByLabel('Artist').fill('DJ')
     await dialog.getByRole('button', { name: 'Add track' }).click()
+    if (title === 'Closing') await expect(b.getByRole('button', { name: 'Edit Opening' })).toBeVisible()
     await openActions(b, title)
     await expect(b.getByRole('button', { name: 'Edit ' + title })).toBeVisible()
   }
+  await expect(b.getByRole('button', { name: 'Edit Opening' })).toBeHidden()
   const titles = (page: typeof a) => page.locator('.track-info strong')
   await openActions(b, 'Closing')
   await b.getByRole('button', { name: 'Move Closing up' }).press('Enter')

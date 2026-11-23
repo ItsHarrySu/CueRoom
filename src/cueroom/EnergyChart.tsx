@@ -21,7 +21,7 @@ export function EnergyChart({ tracks }: { tracks: Track[] }) {
           return <g key={i}>
             {previous && <line x1={previous.x} y1={previous.y} x2={point.x} y2={point.y} />}
             <circle cx={point.x} cy={point.y} r={Math.min(4, Math.max(1, 90 / tracks.length))}>
-              <title>{tracks[i].title} · {label(levels[i])}</title>
+              <title>{`${tracks[i].title} · ${label(levels[i])}`}</title>
             </circle>
           </g>
         })}
