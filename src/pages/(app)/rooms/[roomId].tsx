@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuthStatus, useMutations, useQuery, type RecordData } from 'deepspace'
-import { ArrowUp, ArrowDown, Link2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowUp, ArrowDown, Grid2X2, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Modal, useToast } from '@/components/ui'
 import {
   act,
@@ -108,6 +108,7 @@ type Edit = { kind: 'add' } | { kind: 'edit' | 'delete'; row: RecordData<Track> 
 
 function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
   const { roomId } = room
+  const rooms = useQuery<Room>('rooms')
   const query = useQuery<Track>('tracks', { where: { roomId }, limit: 201 })
   const rows = orderedTracks(query.records, room)
   const [edit, setEdit] = useState<Edit | null>(null)
@@ -145,35 +146,37 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
       toast.error('Clipboard access failed. Allow clipboard access and try again.')
     }
   }
+  const count = String(stats.count).padStart(2, '0')
+  const addTrack = <Button disabled={moving || rows.length >= 200 || query.status !== 'ready'}
+    onClick={() => setEdit({ kind: 'add' })}><Plus />Add track</Button>
   return (
-    <section className="studio room-workspace" data-pane={pane}>
+    <section className="room-workspace" data-pane={pane}>
       <nav className="room-rail" aria-label="Room navigation">
-        <Link to="/home">← Your rooms</Link>
-        <strong aria-current="page">{room.name}</strong>
+        <div className="rail-brand"><Grid2X2 size={18} />CueRoom</div>
+        <small>Workspace</small><Link to="/home">All rooms</Link>
+        <small>Your rooms</small><strong aria-current="page">{room.name}</strong>
+        {rooms.status === 'ready' && rooms.records.filter(validRoom).filter(r => r.recordId !== roomId).map(r =>
+          <Link key={r.recordId} to={'/rooms/' + r.recordId}>{r.data.name}</Link>)}
+        <div className="rail-collab"><small>Collaboration</small>
+          <button disabled={!uuid.test(room.inviteToken)} onClick={share}>Invite a DJ</button>
+          <p>Share this room with a collaborator.</p>
+        </div>
       </nav>
-      <div className="section-head mt-4">
-        <div>
-          <span className="caption">Setlist workspace</span>
-          <h1>{room.name}</h1>
-        </div>
-        <div className="tools">
-          <Button disabled={!uuid.test(room.inviteToken)} variant="outline" onClick={share}>
-            <Link2 />
-            Copy invitation
+      <div className="room-center">
+      <div className="room-crumb"><Link to="/home">Rooms</Link> / <span>{room.name}</span></div>
+      <header className="room-heading">
+        <div><h1>{room.name}</h1><p>Shared setlist workspace</p></div>
+        <div className="room-actions">
+          <Button disabled={!uuid.test(room.inviteToken)} variant="outline" onClick={share} aria-label="Copy invitation">
+            <span className="desktop-invite">Copy invitation</span><span className="mobile-invite">Invite</span>
           </Button>
-          <Button
-            disabled={moving || rows.length >= 200 || query.status !== 'ready'}
-            onClick={() => setEdit({ kind: 'add' })}
-          >
-            <Plus />
-            Add track
-          </Button>
+          <div className="desktop-add">{addTrack}</div>
         </div>
-      </div>
+      </header>
       {query.status === 'ready' && <>
         <dl className="set-summary">
-          <div><dt>Tracks</dt><dd>{stats.count} <small>/ 200</small></dd></div>
-          <div><dt>Average BPM</dt><dd>{stats.average === null ? 'Unavailable' : Number(stats.average.toFixed(1))}</dd></div>
+          <div><dt>Tracks</dt><dd>{count}</dd></div>
+          <div><dt>Avg BPM</dt><dd>{stats.average === null ? 'Unavailable' : Number(stats.average.toFixed(1))}</dd></div>
           <div><dt>BPM range</dt><dd>{stats.range?.join('–') ?? 'Unavailable'}</dd></div>
         </dl>
         <div className="pane-switch" role="group" aria-label="Workspace view">
@@ -181,21 +184,23 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
           <button aria-pressed={pane === 'insights'} aria-controls="set-insights" onClick={() => setPane('insights')}>Set insights</button>
         </div>
       </>}
-      <div id="running-order" className="panel sheet" data-ready={query.status === 'ready'}>
+      <div id="running-order" className="order-sheet" data-ready={query.status === 'ready'}>
         <header className="sheet-head">
-          <h2>Running order</h2>
+          <div><h2>Running order</h2><p>Arrange your transitions before the first cue.</p></div>
           {query.status === 'ready' && (
             <span className="meta">
-              {rows.length} {rows.length === 1 ? 'track' : 'tracks'}
+              {count} / 200
             </span>
           )}
         </header>
         <ReadState {...query} />
         {query.status === 'ready' &&
           (rows.length ? (
+            <>
+            <div className="track-columns" aria-hidden="true"><span>#</span><span>Track</span><span>Tempo</span><span>Key</span><span>Energy</span></div>
             <ol>
               {rows.map((row, i) => (
-                <li className="track-row" data-selected={i === selected} key={row.recordId}>
+                <li className="order-track" data-selected={i === selected} key={row.recordId}>
                   <span className="meta">{String(i + 1).padStart(2, '0')}</span>
                   <button className="track-info text-left" aria-pressed={selected === i}
                     aria-label={'Select ' + row.data.title + ' for transition analysis'}
@@ -203,12 +208,15 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
                     <strong>{row.data.title}</strong>
                     <span className="text-muted-foreground">{row.data.artist}</span>
                   </button>
-                  <div className="track-details">
-                    <span>{validBpm(row.data.bpm) ? row.data.bpm : '—'} BPM</span>
-                    <span className="recorded-key">Key {row.data.musicalKey || '—'}</span>
-                    <span>Energy {energyLevel(row.data.energy) ?? '—'}/5</span>
-                  </div>
-                  <div className="row-tools">
+                  <span className="tempo">{validBpm(row.data.bpm) ? row.data.bpm : '—'} <small>BPM</small></span>
+                  <span className="track-key" aria-label={'Key ' + (row.data.musicalKey || 'unavailable')}>{row.data.musicalKey || '—'}</span>
+                  <span className="track-energy" aria-label={'Energy ' + (energyLevel(row.data.energy) ?? 'unavailable')}>
+                    <small>Energy</small>{energyLevel(row.data.energy) === null ? '—' : [1,2,3,4,5].map(n =>
+                      <i key={n} data-filled={n <= row.data.energy!} />)}
+                  </span>
+                  <details className="track-actions" name="track-actions">
+                    <summary aria-label={'Actions for ' + row.data.title}><MoreHorizontal size={17} /></summary>
+                    <div className="row-tools">
                     <Button
                       size="icon"
                       variant="ghost"
@@ -245,10 +253,12 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
                     >
                       <Trash2 />
                     </Button>
-                  </div>
+                    </div>
+                  </details>
                 </li>
               ))}
-            </ol>
+            </ol><p className="order-help">Select a track to inspect its transition. Open its actions to edit or reorder.</p>
+            </>
           ) : (
             <>
               <h2 className="text-xl font-semibold">An open setlist</h2>
@@ -256,6 +266,8 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
             </>
           ))}
       </div>
+      </div>
+      <div className="mobile-add"><div><small>{room.name}</small>{query.status === 'ready' && <b>{count} tracks</b>}</div>{addTrack}</div>
       {query.status === 'ready' && <SetInsights tracks={tracks} selected={selected} />}
       {edit && (
         <TrackDialog edit={edit} roomId={roomId} close={() => setEdit(null)} refresh={refresh} />

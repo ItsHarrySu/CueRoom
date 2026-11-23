@@ -192,23 +192,31 @@ test('members see track changes and persist a keyboard reorder across sessions',
   expect(new Set(members.map(row => row.col_userid)).size).toBe(2)
   expect(members.every(row => row.col_status === 'active')).toBe(true)
 
+  async function openActions(page: typeof a, title: string) {
+    const actions = page.locator('details').filter({ has: page.getByLabel('Actions for ' + title, { exact: true }) })
+    if (await actions.getAttribute('open') === null) await actions.locator('summary').click()
+  }
   for (const title of ['Opening', 'Closing']) {
     await a.getByRole('button', { name: 'Add track' }).click()
     await dialog.getByLabel('Title').fill(title)
     await dialog.getByLabel('Artist').fill('DJ')
     await dialog.getByRole('button', { name: 'Add track' }).click()
+    await openActions(b, title)
     await expect(b.getByRole('button', { name: 'Edit ' + title })).toBeVisible()
   }
   const titles = (page: typeof a) => page.locator('.track-info strong')
+  await openActions(b, 'Closing')
   await b.getByRole('button', { name: 'Move Closing up' }).press('Enter')
   for (const page of [a, b]) await expect(titles(page)).toHaveText(['Closing', 'Opening'])
   await Promise.all([a.reload(), b.reload()])
   for (const page of [a, b]) await expect(titles(page)).toHaveText(['Closing', 'Opening'])
 
+  await openActions(a, 'Opening')
   await a.getByRole('button', { name: 'Edit Opening' }).click()
   await dialog.getByLabel('Title').fill('Encore')
   await dialog.getByRole('button', { name: 'Save changes' }).click()
   await expect(titles(b)).toHaveText(['Closing', 'Encore'])
+  await openActions(b, 'Closing')
   await b.getByRole('button', { name: 'Delete Closing' }).click()
   await b.getByRole('dialog').getByRole('button', { name: 'Delete track' }).click()
   await expect(titles(a)).toHaveText(['Encore'])
@@ -219,8 +227,10 @@ test('members see track changes and persist a keyboard reorder across sessions',
   await memberDialog.getByLabel('Artist').fill('DJ')
   await memberDialog.getByRole('button', { name: 'Add track' }).click()
   await expect(titles(a)).toHaveText(['Encore', 'Interlude'])
+  await openActions(a, 'Interlude')
   await a.getByRole('button', { name: 'Move Interlude up' }).click()
   await expect(titles(b)).toHaveText(['Interlude', 'Encore'])
+  await openActions(b, 'Encore')
   await b.getByRole('button', { name: 'Edit Encore' }).click()
   await memberDialog.getByLabel('Title').fill('Finale')
   await memberDialog.getByRole('button', { name: 'Save changes' }).click()
@@ -229,6 +239,7 @@ test('members see track changes and persist a keyboard reorder across sessions',
   disconnected = true
   expect(sockets.size).toBeGreaterThan(0)
   for (const socket of sockets) await socket.close({ code: 1012 })
+  await openActions(a, 'Interlude')
   await a.getByRole('button', { name: 'Delete Interlude' }).click()
   await dialog.getByRole('button', { name: 'Delete track' }).click()
   await expect(titles(a)).toHaveText(['Finale'])
