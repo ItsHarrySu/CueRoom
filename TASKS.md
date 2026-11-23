@@ -8,8 +8,8 @@ Plans is the Lead Architect. Dependencies below are planning prerequisites. Plan
 | CR-002 Canonical specifications | Codex | Complete | CR-001 | Plans approved the specifications merged in PR #2 | — |
 | CR-003 App registration and build verification | Unrecorded | Complete | CR-002 | Registration commit `6a41340`. Plans confirmed local TypeScript, production build, unit tests and lint passed. | — |
 | CR-004 Data schema and permission foundations | Codex | Complete | CR-002, CR-003 | Three collections registered. TypeScript, production build, 31 unit tests and lint passed. SDK schema lint returned zero warnings. | Approved and merged. Authenticated integration tests pending. |
-| CR-005 Room creation and invitation joining | Codex | Implemented, pending Plans review and live integration verification | CR-004 | Authenticated room actions and focused unit tests | Live multi-user verification pending. |
-| CR-006 Track CRUD and validation | Unassigned | Pending | CR-004, CR-005 for membership integration | — | — |
+| CR-005 Room creation and invitation joining | Codex | Complete, pending live integration verification | CR-004 | Authenticated room actions and focused unit tests | Live multi-user verification pending. |
+| CR-006 Track CRUD and validation | Codex | Implemented, pending Plans review | CR-004, CR-005 | Authenticated actions and mocked RecordRoom tests | Live integration verification pending. |
 | CR-007 Frontend dashboard and setlist editor | Unassigned | Pending | CR-002 contracts, CR-005 and CR-006 for integration | — | — |
 | CR-008 Data subscriptions and collaborative ordering | Unassigned | Pending | CR-004, CR-006, CR-007 for editor integration | — | — |
 | CR-009 Multi-user authorization and integration tests | Unassigned | Pending | CR-005 through CR-008 for full scenarios | — | — |
@@ -26,3 +26,11 @@ CR-005 owns server-side authorization for room creation and invitation joining, 
 Future authenticated actions must set the room envelope ID equal to `roomId`, validate `trackOrder` as a string array, and write only the literal `active` for membership status. JSON and select interpretations do not enforce those value constraints. The SDK also counts a stored null status as membership. Required columns are checked on create, so actions must preserve required values on updates. Optional track columns accept null without additional configuration.
 
 Local tests exercised SDK permission predicates and schema lint. The cloud CLI reported `not_authenticated`. Live reads, lists, subscriptions, direct-write denial and persisted membership uniqueness still need authenticated integration coverage.
+
+## CR-006 review notes
+
+SDK 0.44.2 merges a partial update with the current record inside RecordRoom. Track edits submit only supplied fields and order writes submit only trackOrder. Track creation omits recordId because a supplied key is an upsert. Internally the SDK also uses putRecord for its generated timestamp/random ID, so absolute collision exclusion would require a create-only primitive.
+
+Track actions reject overlapping requests for the same room in one Worker isolate. Across isolates, capacity checks, record writes and order updates are separate operations with no transaction or compare-and-swap in ActionTools. Adds recheck capacity and attempt to remove their own acknowledged row on observed overflow. Order repair reloads live IDs and stored order after a write and retries once. Ambiguous creates can repair order but cannot safely identify a row to undo or return. Refresh before retrying an unconfirmed add because replay can create a duplicate.
+
+CR-008 must account for intervening or late writes after verification, including concurrent reorders. Strict distributed capacity, atomic order changes and crash recovery remain open. CR-009 should exercise these paths and authorization on a live RecordRoom.
