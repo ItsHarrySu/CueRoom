@@ -1,3 +1,4 @@
+import { IntegrationSettings } from '@/cueroom/IntegrationSettings'
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuthStatus, useQuery } from 'deepspace'
@@ -57,6 +58,7 @@ function Dashboard() {
           </Button>
         </div>
       </div>
+      <IntegrationSettings />
       <ReadState {...rooms} />
       {rooms.status === 'ready' &&
         (list.length ? (

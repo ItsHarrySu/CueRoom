@@ -65,7 +65,7 @@ it('renders move controls in subscribed room order with the boundaries disabled'
 it('offers email invitations to the room owner only', () => {
   const room = { recordId: id, data: { roomId: id, ownerId: 'a', name: 'Set', trackOrder: [] } }
   sdk.query.mockImplementation(collection => ({ status: 'ready', records: collection === 'rooms' ? [room] : [] }))
-  expect(page(path)).toContain('Send invitation email')
+  expect(page(path)).toContain('Email invitations disabled')
   sdk.auth.mockReturnValue({ isSignedIn: true, userId: 'b' })
-  expect(page(path)).not.toContain('Send invitation email')
+  expect(page(path)).not.toContain('Email invitations disabled')
 })

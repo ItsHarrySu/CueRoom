@@ -5,6 +5,7 @@
  * here: specific API and WebSocket handlers must precede the SPA fallback.
  */
 
+import { registerIntegrationSettings } from './src/server/integration-settings'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import {
@@ -98,6 +99,8 @@ export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
   AUTH_WORKER_URL: string
   /** Comma-separated exact Expo/native callback URIs (for example, myapp://auth/callback). */
   NATIVE_AUTH_REDIRECT_URIS?: string
+  EMAIL_SENDING_ENABLED?: string
+  AI_GENERATION_ENABLED?: string
   INVITATION_QUOTA: D1Database
   APP_NAME: string
   /** Immutable record-scope and platform identity. */
@@ -129,6 +132,7 @@ app.use('*', async (c, next) => {
 
 // Registration order is part of the worker contract. The wildcard auth route
 // follows its special cases, AI precedes platform proxies, and static is last.
+registerIntegrationSettings(app)
 registerAuthAndIntegrationRoutes(app)
 registerRealtimeRoutes(app)
 registerActionRoutes(app, resolveAuth)

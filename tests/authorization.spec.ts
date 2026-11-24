@@ -146,3 +146,17 @@ test('capacity, stale orders and overlapping operations preserve the live set', 
   await page.reload()
   await expect(titles).toHaveText(finalOrder)
 })
+
+test('room ownership alone cannot enable paid email', async ({ users }) => {
+  const [member] = await users(1)
+  const page = member.page
+  await page.goto('/home')
+  const { roomId } = await action(page, 'createRoom', {name:'Settings boundary'})
+  await page.goto('/rooms/' + roomId)
+  await expect(page.getByRole('button',{name:'Email invitations disabled'})).toBeDisabled()
+  const status = await page.evaluate(async () => {
+    const path = '/tests/helpers/settings.ts'
+    return (await import(path)).attemptToggle()
+  })
+  expect(status).toBe(403)
+})
