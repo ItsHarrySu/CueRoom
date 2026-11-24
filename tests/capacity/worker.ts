@@ -1,3 +1,4 @@
+import {reserveAI} from '../../src/server/ai-budget'
 import { registerIntegrationSettings } from '../../src/server/integration-settings'
 import { reserveInvitation } from '../../src/server/invitation-quota'
 // Local workerd fixture. Only this test entry point exposes seeding and SQL inspection.
@@ -61,6 +62,8 @@ app.put('/test-settings', c => {
   req.headers.set('Origin', new URL(req.url).origin)
   return app.fetch(req, c.env)
 })
+app.post('/test-reserve-ai', async c => c.json(await reserveAI(
+  c.env, crypto.randomUUID(), 'owner', crypto.randomUUID(), 1024, 25000)))
 app.post('/test-reserve-email', async c => c.json(await reserveInvitation(
   c.env.INVITATION_QUOTA, 'owner', 'shared-room', crypto.randomUUID(), c.env.DEEPSPACE_APP_ID)))
 registerActionRoutes(app, resolveAuth)

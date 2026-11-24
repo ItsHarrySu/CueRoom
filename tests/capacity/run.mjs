@@ -66,6 +66,9 @@ try {
   const attempts = await Promise.all(Array.from({length:12},async (_,i) =>
     (await workers[i%3].fetch('https://local/test-reserve-email',{method:'POST'})).json()))
   assert.equal(attempts.filter(Boolean).length,3)
+  const aiReservations = await Promise.all(Array.from({length:12},async (_,i) =>
+    (await workers[i%3].fetch('https://local/test-reserve-ai',{method:'POST'})).json()))
+  assert.equal(aiReservations.filter(Boolean).length,4)
   const scope = 'app:test'
   async function sql(query, target = scope) {
     const res = await workers[0].fetch('https://local/fixture/' + target + '/inspect', {

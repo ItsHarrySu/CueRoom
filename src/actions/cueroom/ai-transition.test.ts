@@ -2,12 +2,12 @@ import { afterAll, expect, it, vi } from 'vitest'
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare'
 import type { ActionContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
-import { aiTransitionAction, generateTransition } from './ai-transition'
+import { aiTransitionAction, generateTransition, unverifiedDispatch } from './ai-transition'
 import { settingsTable } from '../../server/integration-settings'
 import { reserveAI } from '../../server/ai-budget'
 import { snapshotDigest, transitionMetadata } from '../../cueroom/transition-snapshot'
 
-const mf = new Miniflare(convertV4MiniflareOptions({modules:true,script:'export default {}',d1Databases:['budget','action','wire']}))
+const mf = new Miniflare(convertV4MiniflareOptions({modules:true,script:'export default {}',d1Databases:['budget','action','wire','stale','reorder']}))
 afterAll(() => mf.dispose())
 const roomId = crypto.randomUUID()
 async function context(database: string) {
@@ -27,7 +27,7 @@ async function context(database: string) {
       const records = collection==='tracks'?rows:[{data:{teamId:roomId,userId:'owner',status:'active'}}]
       return {success:true,data:{count:records.length,records}}
     }}}
-  return {ctx:ctx as unknown as ActionContext<Env>,metadata}
+  return {ctx:ctx as unknown as ActionContext<Env>,metadata,rows,fixture:ctx}
 }
 it('requires a verified ceiling, enabled deployment and preference, owner identity and matching snapshot',async () => {
   const {ctx,metadata} = await context('action')
@@ -58,7 +58,7 @@ it('sends one bounded fixed-model request and never treats an unknown envelope a
   const {ctx,metadata} = await context('wire')
   const fetch = vi.fn<(url:string,init:RequestInit) => Promise<Response>>().mockResolvedValue(Response.json({accepted:true}))
   ctx.env.API_WORKER = {fetch} as unknown as Fetcher
-  const run = aiTransitionAction(1000)
+  const run = aiTransitionAction(1000,unverifiedDispatch)
   expect((await run(ctx)).success).toBe(false)
   expect((await run(ctx)).success).toBe(false)
   expect(fetch).toHaveBeenCalledTimes(1)
@@ -68,4 +68,23 @@ it('sends one bounded fixed-model request and never treats an unknown envelope a
   const body = JSON.parse(String(init.body))
   expect(body).toMatchObject({model:'gpt-5.4-mini',max_tokens:500})
   expect(JSON.parse(body.messages[1].content)).toEqual(metadata)
+})
+
+it.each(['stale','reorder'])('rejects a concurrent %s change after the first snapshot',async change => {
+  const {ctx,rows,fixture} = await context(change)
+  const get = fixture.tools.get
+  let roomReads = 0
+  fixture.tools.get = async (...args) => {
+    const result = await get(...args)
+    if (args[0] === 'rooms') {
+      roomReads++
+      if (roomReads === 2 && change === 'stale') rows[0].data.artist = 'Updated'
+      if (roomReads >= 3 && change === 'reorder' && result.success) Object.assign(result.data.record!.data,{trackOrder:['b','a']})
+    }
+    return result
+  }
+  const transport = vi.fn()
+  expect((await aiTransitionAction(1000,transport)(ctx)).success).toBe(false)
+  expect(transport).not.toHaveBeenCalled()
+  expect(await ctx.env.INVITATION_QUOTA.prepare('SELECT COUNT(*) AS n FROM ai_attempts').first('n')).toBe(1)
 })
