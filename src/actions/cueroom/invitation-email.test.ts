@@ -87,13 +87,13 @@ it('blocks dispatch when the room limit is exhausted', async () => {
   expect(transport).toHaveBeenCalledTimes(3)
 })
 
-it('uses only the owner binding and treats an undocumented 200 as ambiguous', async () => {
-  const ctx = context({db: await database('delivery')})
-  const fetch = vi.fn(async () => Response.json({ accepted: true }))
-  ctx.env.API_WORKER = { fetch } as unknown as Fetcher
+it('denies production with both switches on before reservation or transport', async () => {
+  const ctx = context({db: await database('denial')})
+  const fetch = vi.fn()
+  ctx.env.API_WORKER = {fetch} as unknown as Fetcher
   expect((await sendInvitationEmail(ctx)).success).toBe(false)
-  expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/integrations\/email\/send$/),
-    expect.objectContaining({headers: {Authorization: 'Bearer fixture','Content-Type':'application/json'}}))
+  expect(fetch).not.toHaveBeenCalled()
+  expect(await ctx.env.INVITATION_QUOTA.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name='invitation_attempts'").first('n')).toBe(0)
 })
 
 it('reserves nothing while the master or runtime preference is off', async () => {

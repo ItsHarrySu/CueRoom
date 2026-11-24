@@ -1,4 +1,4 @@
-import { apiWorkerFetch } from 'deepspace/worker'
+import { emailDelivery, verifiedEmailAcknowledgement } from '../../server/email-transport'
 import { emailReady, readSettings } from '../../server/integration-settings'
 import type { ActionHandler } from 'deepspace/worker'
 import { z } from 'zod/v4'
@@ -35,7 +35,7 @@ export function invitationEmailAction(deliver?: Delivery): ActionHandler<Env> {
       if (page.count !== 1 || page.records.length !== 1 || 'nextOffset' in page ||
         ('truncated' in page && page.truncated) || member?.teamId !== roomId ||
         member.userId !== userId || member.status !== 'active') return fail('Room access denied.')
-      if (!deliver || !emailReady(env) || !(await readSettings(env)).email || !z.uuid().safeParse(data.inviteToken).success ||
+      if (!deliver || !emailReady(env, !!deliver) || !(await readSettings(env)).email || !z.uuid().safeParse(data.inviteToken).success ||
         typeof env.APP_NAME !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(env.APP_NAME))
         return fail(unavailable)
       const link = `https://${env.APP_NAME}.app.space/rooms/${roomId}#invite=${data.inviteToken}`
@@ -54,14 +54,4 @@ export function invitationEmailAction(deliver?: Delivery): ActionHandler<Env> {
   }
 }
 
-// Catalog outputSchema is null. Until an acknowledgment is verified, every dispatch
-// returns an ambiguous result and retains its quota reservation.
-export const sendInvitationEmail = invitationEmailAction(async (message, env) => {
-  const response = await apiWorkerFetch(env, '/api/integrations/email/send', {
-    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
-    headers: { Authorization: 'Bearer ' + env.APP_OWNER_JWT, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: message.recipient, subject: message.subject, text: message.text }),
-  })
-  await response.body?.cancel()
-  throw Error('Unconfirmed delivery')
-})
+export const sendInvitationEmail = invitationEmailAction(emailDelivery(verifiedEmailAcknowledgement))

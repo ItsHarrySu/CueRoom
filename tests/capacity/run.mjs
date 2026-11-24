@@ -37,7 +37,9 @@ const runtime = new Miniflare(
       script: bundle.outputFiles[0].text,
       compatibilityDate: '2026-07-01',
       compatibilityFlags: ['nodejs_compat'],
+      d1Databases: { INVITATION_QUOTA: 'shared-quota' },
       bindings: {
+        OWNER_USER_ID: 'alice',
         DEEPSPACE_APP_ID: 'test',
         AUTH_JWT_ISSUER: 'cue-test',
         AUTH_JWT_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }),
@@ -50,6 +52,20 @@ const runtime = new Miniflare(
 )
 try {
   const workers = await Promise.all(names.map((name) => runtime.getWorker(name)))
+  const setting = (worker, feature) => worker.fetch('https://local/api/cueroom/settings', {
+    method: 'PUT', headers: {Origin:'https://local',Authorization:bearer('alice'),'Content-Type':'application/json'},
+    body:JSON.stringify({feature,enabled:true}),
+  })
+  const saved = await Promise.all([setting(workers[0],'email'),setting(workers[1],'ai')])
+  assert.ok(saved.every(response => response.ok))
+  const settings = await (await workers[2].fetch('https://local/api/cueroom/settings',{
+    headers:{Authorization:bearer('alice')},
+  })).json()
+  assert.deepEqual(settings.preferences,{email:true,ai:true})
+  assert.equal(settings.email,false)
+  const attempts = await Promise.all(Array.from({length:12},async (_,i) =>
+    (await workers[i%3].fetch('https://local/test-reserve-email',{method:'POST'})).json()))
+  assert.equal(attempts.filter(Boolean).length,3)
   const scope = 'app:test'
   async function sql(query, target = scope) {
     const res = await workers[0].fetch('https://local/fixture/' + target + '/inspect', {

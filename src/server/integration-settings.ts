@@ -1,3 +1,4 @@
+import { verifiedEmailAcknowledgement } from './email-transport'
 import type { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod/v4'
@@ -9,8 +10,8 @@ export const settingsTable = `CREATE TABLE IF NOT EXISTS integration_settings (
   PRIMARY KEY(app, feature))`
 const input = z.strictObject({ feature: z.enum(['email','ai']), enabled: z.boolean() })
 
-export function emailReady(env: Env) {
-  return env.EMAIL_SENDING_ENABLED === 'true' && !!env.API_WORKER && !!env.APP_OWNER_JWT?.trim()
+export function emailReady(env: Env, verified = !!verifiedEmailAcknowledgement) {
+  return verified && env.EMAIL_SENDING_ENABLED === 'true' && !!env.API_WORKER && !!env.APP_OWNER_JWT?.trim()
 }
 
 export async function readSettings(env: Env) {

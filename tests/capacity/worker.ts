@@ -1,3 +1,5 @@
+import { registerIntegrationSettings } from '../../src/server/integration-settings'
+import { reserveInvitation } from '../../src/server/invitation-quota'
 // Local workerd fixture. Only this test entry point exposes seeding and SQL inspection.
 import { Hono } from 'hono'
 import { AppRecordRoom } from '../../src/server/app-record-room'
@@ -51,6 +53,9 @@ export class FixtureRoom extends AppRecordRoom {
 
 const app = new Hono<AppContext>()
 app.onError((error, c) => c.json({ success: false, error: error.message }, 500))
+registerIntegrationSettings(app)
+app.post('/test-reserve-email', async c => c.json(await reserveInvitation(
+  c.env.INVITATION_QUOTA, 'owner', 'shared-room', crypto.randomUUID(), c.env.DEEPSPACE_APP_ID)))
 registerActionRoutes(app, resolveAuth)
 registerRealtimeRoutes(app)
 app.all('/fixture/:scope/*', (c) => {
