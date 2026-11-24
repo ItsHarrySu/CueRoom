@@ -52,12 +52,12 @@ const runtime = new Miniflare(
 )
 try {
   const workers = await Promise.all(names.map((name) => runtime.getWorker(name)))
-  const setting = (worker, feature) => worker.fetch('https://local/api/cueroom/settings', {
-    method: 'PUT', headers: {Origin:'https://local',Authorization:bearer('alice'),'Content-Type':'application/json'},
+  const setting = (worker, feature) => worker.fetch('https://local/test-settings', {
+    method: 'PUT', headers: {Authorization:bearer('alice'),'Content-Type':'application/json'},
     body:JSON.stringify({feature,enabled:true}),
   })
   const saved = await Promise.all([setting(workers[0],'email'),setting(workers[1],'ai')])
-  assert.ok(saved.every(response => response.ok))
+  for (const response of saved) assert.equal(response.status,200,await response.text())
   const settings = await (await workers[2].fetch('https://local/api/cueroom/settings',{
     headers:{Authorization:bearer('alice')},
   })).json()

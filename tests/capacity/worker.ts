@@ -54,6 +54,13 @@ export class FixtureRoom extends AppRecordRoom {
 const app = new Hono<AppContext>()
 app.onError((error, c) => c.json({ success: false, error: error.message }, 500))
 registerIntegrationSettings(app)
+// Miniflare's Node RPC bridge rejects an Origin header before workerd sees it.
+// Recreate the browser's same-origin request inside this fixture Worker.
+app.put('/test-settings', c => {
+  const req = new Request(new URL('/api/cueroom/settings', c.req.url), c.req.raw)
+  req.headers.set('Origin', new URL(req.url).origin)
+  return app.fetch(req, c.env)
+})
 app.post('/test-reserve-email', async c => c.json(await reserveInvitation(
   c.env.INVITATION_QUOTA, 'owner', 'shared-room', crypto.randomUUID(), c.env.DEEPSPACE_APP_ID)))
 registerActionRoutes(app, resolveAuth)
