@@ -1,3 +1,5 @@
+import { apiWorkerFetch } from 'deepspace/worker'
+import { emailReady, readSettings } from '../../server/integration-settings'
 import type { ActionHandler } from 'deepspace/worker'
 import { z } from 'zod/v4'
 import type { Env } from '../../../worker'
@@ -12,7 +14,7 @@ const fail = (error: string) => ({ success: false as const, error })
 const unavailable = 'Email delivery is unavailable. Copy the invitation link to share it.'
 type Message = { recipient: string; subject: string; text: string }
 // This is a CueRoom transport boundary. Provider wire fields and acknowledgement are unverified.
-type Delivery = (message: Message) => Promise<'accepted'>
+type Delivery = (message: Message, env: Env) => Promise<'accepted'>
 
 export function invitationEmailAction(deliver?: Delivery): ActionHandler<Env> {
   return async ({ userId, callerJwt, params, tools, env }) => {
@@ -33,16 +35,16 @@ export function invitationEmailAction(deliver?: Delivery): ActionHandler<Env> {
       if (page.count !== 1 || page.records.length !== 1 || 'nextOffset' in page ||
         ('truncated' in page && page.truncated) || member?.teamId !== roomId ||
         member.userId !== userId || member.status !== 'active') return fail('Room access denied.')
-      if (!deliver || !z.uuid().safeParse(data.inviteToken).success ||
+      if (!deliver || !emailReady(env) || !(await readSettings(env)).email || !z.uuid().safeParse(data.inviteToken).success ||
         typeof env.APP_NAME !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(env.APP_NAME))
         return fail(unavailable)
       const link = `https://${env.APP_NAME}.app.space/rooms/${roomId}#invite=${data.inviteToken}`
-      if (!await reserveInvitation(env.INVITATION_QUOTA, userId, roomId, confirmation))
+      if (!await reserveInvitation(env.INVITATION_QUOTA, userId, roomId, confirmation, env.DEEPSPACE_APP_ID))
         return fail('Invitation already requested or sending limit reached.')
       // A failed or ambiguous dispatch keeps its reservation. Never retry here.
       try {
         if (await deliver({ recipient, subject: 'Invitation to a CueRoom setlist',
-          text: 'Sign in to CueRoom and accept the invitation: ' + link }) === 'accepted')
+          text: 'Sign in to CueRoom and accept the invitation: ' + link }, env) === 'accepted')
           return { success: true, data: { accepted: true } }
       } catch { /* Do not expose transport errors, recipient or token. */ }
       return fail('Delivery could not be confirmed.')
@@ -52,5 +54,14 @@ export function invitationEmailAction(deliver?: Delivery): ActionHandler<Env> {
   }
 }
 
-// No provider adapter, environment switch or client-selectable transport.
-export const sendInvitationEmail = invitationEmailAction()
+// Catalog outputSchema is null. Until an acknowledgment is verified, every dispatch
+// returns an ambiguous result and retains its quota reservation.
+export const sendInvitationEmail = invitationEmailAction(async (message, env) => {
+  const response = await apiWorkerFetch(env, '/api/integrations/email/send', {
+    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
+    headers: { Authorization: 'Bearer ' + env.APP_OWNER_JWT, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: message.recipient, subject: message.subject, text: message.text }),
+  })
+  await response.body?.cancel()
+  throw Error('Unconfirmed delivery')
+})

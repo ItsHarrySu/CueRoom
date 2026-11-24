@@ -3,12 +3,17 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare'
 import type { ActionContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
 import { invitationEmailAction, sendInvitationEmail } from './invitation-email'
+import { settingsTable } from '../../server/integration-settings'
 import { reserveInvitation } from '../../server/invitation-quota'
 
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {}',
   d1Databases: ['denial', 'delivery', 'dedup', 'room', 'owner', 'app'] }))
 afterAll(() => mf.dispose())
-const database = async (name: string) => await mf.getD1Database(name) as unknown as D1Database
+const database = async (name: string) => {
+  const db = await mf.getD1Database(name) as unknown as D1Database
+  await db.batch([db.prepare(settingsTable), db.prepare("INSERT OR IGNORE INTO integration_settings VALUES ('test','email',1)")])
+  return db
+}
 const roomId = crypto.randomUUID()
 const inviteToken = crypto.randomUUID()
 const deliver = vi.fn(async () => 'accepted' as const)
@@ -18,7 +23,7 @@ function context(options: { user?: string; status?: string; recipient?: unknown;
   return { userId: options.user ?? 'owner', callerJwt: options.callerJwt ?? 'verified',
     params: { roomId, recipient: options.recipient ?? 'guest@example.org',
       confirmation: options.confirmation ?? crypto.randomUUID(), ...options.extra },
-    env: { APP_NAME: 'cue-test', INVITATION_QUOTA: options.db },
+    env: { APP_NAME: 'cue-test', DEEPSPACE_APP_ID: 'test', EMAIL_SENDING_ENABLED: 'true', API_WORKER: {}, APP_OWNER_JWT: 'fixture', INVITATION_QUOTA: options.db },
     tools: {
       get: vi.fn(async () => ({ success: true, data: { record: { recordId: roomId,
         data: { ownerId: 'owner', roomId, inviteToken } } } })),
@@ -52,7 +57,7 @@ it('constructs the invitation from trusted data and dispatches once under concur
   const results = await Promise.all([send(ctx), send(ctx)])
   expect(results.filter(r => r.success)).toHaveLength(1)
   expect(deliver.mock.calls).toEqual([[{ recipient: 'guest@example.org', subject: 'Invitation to a CueRoom setlist',
-    text: 'Sign in to CueRoom and accept the invitation: https://cue-test.app.space/rooms/' + roomId + '#invite=' + inviteToken }]])
+    text: 'Sign in to CueRoom and accept the invitation: https://cue-test.app.space/rooms/' + roomId + '#invite=' + inviteToken }, ctx.env]])
 })
 
 it('retains the reservation on ambiguous failure and hides private errors', async () => {
@@ -69,7 +74,7 @@ it.each([{ scope: 'room', limit: 3 }, { scope: 'owner', limit: 10 }, { scope: 'a
     const db = await database(scope)
     const results = await Promise.all(Array.from({ length: limit + 5 }, (_, i) =>
       reserveInvitation(db, scope === 'app' ? 'owner-' + i : 'owner',
-        scope === 'room' ? 'room' : 'room-' + i, crypto.randomUUID())))
+        scope === 'room' ? 'room' : 'room-' + i, crypto.randomUUID(), 'test')))
     expect(results.filter(Boolean)).toHaveLength(limit)
   })
 
@@ -80,4 +85,24 @@ it('blocks dispatch when the room limit is exhausted', async () => {
   for (let i = 0; i < 3; i++) expect((await send(context({ db }))).success).toBe(true)
   expect((await send(context({ db }))).success).toBe(false)
   expect(transport).toHaveBeenCalledTimes(3)
+})
+
+it('uses only the owner binding and treats an undocumented 200 as ambiguous', async () => {
+  const ctx = context({db: await database('delivery')})
+  const fetch = vi.fn(async () => Response.json({ accepted: true }))
+  ctx.env.API_WORKER = { fetch } as unknown as Fetcher
+  expect((await sendInvitationEmail(ctx)).success).toBe(false)
+  expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/integrations\/email\/send$/),
+    expect.objectContaining({headers: {Authorization: 'Bearer fixture','Content-Type':'application/json'}}))
+})
+
+it('reserves nothing while the master or runtime preference is off', async () => {
+  const ctx = context({db: await database('denial')})
+  const send = invitationEmailAction(deliver)
+  ctx.env.EMAIL_SENDING_ENABLED = 'TRUE'
+  expect((await send(ctx)).success).toBe(false)
+  ctx.env.EMAIL_SENDING_ENABLED = 'true'
+  await ctx.env.INVITATION_QUOTA.prepare("UPDATE integration_settings SET enabled=0").run()
+  expect((await send(ctx)).success).toBe(false)
+  expect(await ctx.env.INVITATION_QUOTA.prepare("SELECT COUNT(*) FROM sqlite_master WHERE name='invitation_attempts'").first('COUNT(*)')).toBe(0)
 })
