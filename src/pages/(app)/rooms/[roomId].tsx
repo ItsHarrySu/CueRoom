@@ -273,7 +273,7 @@ function Editor({ room, refresh }: { room: Room; refresh: () => void }) {
       </div>
       <div className="mobile-add"><div><small>{room.name}</small>{query.status === 'ready' && <b>{count} tracks</b>}</div>{addTrack}</div>
       {query.status === 'ready' && <SetInsights tracks={tracks} selected={selected}>
-        {auth.userId && auth.userId === room.ownerId && <TransitionPreview key={JSON.stringify(rows.map(row => [row.recordId, row.data.bpm, row.data.title])) + selected}
+        {auth.userId && auth.userId === room.ownerId && <TransitionPreview key={JSON.stringify(rows.map(row => [row.recordId, row.data.bpm, row.data.title, row.data.artist, row.data.energy, row.data.musicalKey])) + selected}
           roomId={roomId} pair={rows.slice(Math.max(0, Math.min(selected, rows.length - 2))).slice(0, 2)} />}
       </SetInsights>}
       {edit && (

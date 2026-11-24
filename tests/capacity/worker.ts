@@ -1,3 +1,6 @@
+import {actions} from '../../src/actions'
+import {aiTransitionAction} from '../../src/actions/cueroom/ai-transition'
+import {reserveAI} from '../../src/server/ai-budget'
 import { registerIntegrationSettings } from '../../src/server/integration-settings'
 import { reserveInvitation } from '../../src/server/invitation-quota'
 // Local workerd fixture. Only this test entry point exposes seeding and SQL inspection.
@@ -51,6 +54,25 @@ export class FixtureRoom extends AppRecordRoom {
   }
 }
 
+// Only this test bundle registers a metered action with an artificial price.
+actions.fixturePairRace = async ctx => {
+  const hooks = (ctx.env as Env & {TEST_HOOK: Fetcher}).TEST_HOOK
+  let intercepted = false
+  const tools = {...ctx.tools}
+  tools.query = async <T extends Record<string, unknown>>(collection: string, options?: Parameters<typeof tools.query>[1]) => {
+    const result = await ctx.tools.query<T>(collection, options)
+    if (collection === 'tracks' && !intercepted) {
+      intercepted = true
+      await hooks.fetch('https://fixture/edit')
+    }
+    return result
+  }
+  return aiTransitionAction(1000, async () => {
+    await hooks.fetch('https://fixture/dispatch')
+    throw Error('Unexpected dispatch')
+  })({...ctx,tools})
+}
+
 const app = new Hono<AppContext>()
 app.onError((error, c) => c.json({ success: false, error: error.message }, 500))
 registerIntegrationSettings(app)
@@ -61,6 +83,8 @@ app.put('/test-settings', c => {
   req.headers.set('Origin', new URL(req.url).origin)
   return app.fetch(req, c.env)
 })
+app.post('/test-reserve-ai', async c => c.json(await reserveAI(
+  {...c.env,DEEPSPACE_APP_ID:'budget-race'}, crypto.randomUUID(), 'owner', crypto.randomUUID(), 1024, 25000)))
 app.post('/test-reserve-email', async c => c.json(await reserveInvitation(
   c.env.INVITATION_QUOTA, 'owner', 'shared-room', crypto.randomUUID(), c.env.DEEPSPACE_APP_ID)))
 registerActionRoutes(app, resolveAuth)

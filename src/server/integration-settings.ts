@@ -1,4 +1,5 @@
 import { verifiedEmailAcknowledgement } from './email-transport'
+import { aiReady } from './ai-budget'
 import type { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod/v4'
@@ -45,6 +46,6 @@ export function registerIntegrationSettings(app: Hono<AppContext>) {
     }
     const settings = await readSettings(env)
     return c.json({owner, preferences: owner ? settings : undefined,
-      email: settings.email && emailReady(env), ai: false})
+      email: settings.email && emailReady(env), ai: owner && settings.ai && aiReady(env)})
   })
 }

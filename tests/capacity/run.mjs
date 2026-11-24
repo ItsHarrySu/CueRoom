@@ -29,6 +29,8 @@ const bundle = await build({
   external: ['cloudflare:*', 'node:*'],
 })
 const names = ['store', 'second', 'third']
+let editDuringSnapshot
+let fixtureDispatches = 0
 const runtime = new Miniflare(
   convertV4MiniflareOptions({
     workers: names.map((name) => ({
@@ -38,7 +40,17 @@ const runtime = new Miniflare(
       compatibilityDate: '2026-07-01',
       compatibilityFlags: ['nodejs_compat'],
       d1Databases: { INVITATION_QUOTA: 'shared-quota' },
+      serviceBindings: {
+        API_WORKER: () => new Response('fixture', {status:503}),
+        TEST_HOOK: async req => {
+          if (new URL(req.url).pathname === '/edit') await editDuringSnapshot()
+          else fixtureDispatches++
+          return new Response()
+        },
+      },
       bindings: {
+        AI_GENERATION_ENABLED: 'true',
+        APP_OWNER_JWT: 'fixture-only',
         OWNER_USER_ID: 'alice',
         DEEPSPACE_APP_ID: 'test',
         AUTH_JWT_ISSUER: 'cue-test',
@@ -66,6 +78,11 @@ try {
   const attempts = await Promise.all(Array.from({length:12},async (_,i) =>
     (await workers[i%3].fetch('https://local/test-reserve-email',{method:'POST'})).json()))
   assert.equal(attempts.filter(Boolean).length,3)
+  const db = await runtime.getD1Database('INVITATION_QUOTA','store')
+  await db.prepare("INSERT INTO integration_settings VALUES ('budget-race','ai',1)").run()
+  const aiReservations = await Promise.all(Array.from({length:12},async (_,i) =>
+    (await workers[i%3].fetch('https://local/test-reserve-ai',{method:'POST'})).json()))
+  assert.equal(aiReservations.filter(Boolean).length,4)
   const scope = 'app:test'
   async function sql(query, target = scope) {
     const res = await workers[0].fetch('https://local/fixture/' + target + '/inspect', {
@@ -280,6 +297,25 @@ try {
     await sql("SELECT col_title,col_capacityslot FROM c_tracks WHERE _row_id='same-id'"),
     [claimed],
   )
+  const pairRoom = (await action(workers[0],'createRoom',{name:'Snapshot race'})).data.roomId
+  const pair = []
+  for (const title of ['First','Second']) {
+    const added = await action(workers[0],'addTrack',{roomId:pairRoom,track:{title,artist:'DJ'}})
+    pair.push({id:added.data.trackId,title,artist:'DJ',bpm:null,musicalKey:null,energy:null})
+  }
+  let edits = 0
+  editDuringSnapshot = async () => {
+    const edited = await action(workers[1],'updateTrack',{roomId:pairRoom,trackId:pair[0].id,patch:{artist:'Changed'}})
+    assert.equal(edited.success,true)
+    edits++
+  }
+  const snapshot = Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(pair)))).toString('hex')
+  const stale = await action(workers[0],'fixturePairRace',{roomId:pairRoom,fromId:pair[0].id,toId:pair[1].id,snapshot,confirmation:crypto.randomUUID()})
+  assert.equal(stale.success,false)
+  assert.equal(edits,1)
+  assert.equal(fixtureDispatches,0)
+  assert.equal(await db.prepare("SELECT COUNT(*) AS n FROM ai_attempts WHERE app='test'").first('n'),1)
+  console.log('Passed cross-Worker edit during snapshot validation with zero dispatches.')
   console.log(
     'Passed migration, failed initialization, JWT membership, last-slot race, collision, slot domain, client denial and slot reuse.',
   )
