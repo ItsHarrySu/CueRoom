@@ -160,3 +160,15 @@ test('room ownership alone cannot enable paid email', async ({ users }) => {
   })
   expect(status).toBe(403)
 })
+
+test('authenticated room owner retains free advice with AI disabled', async ({users}) => {
+  const [member] = await users(1)
+  const page = member.page
+  await page.goto('/home')
+  const {roomId} = await action(page,'createRoom',{name:'Free preview'})
+  for (const title of ['Intro','Outro']) await action(page,'addTrack',{roomId,track:{title,artist:'Sample',bpm:120}})
+  await page.goto('/rooms/'+roomId)
+  await expect(page.getByRole('button',{name:'Generate paid AI recommendation'})).toBeDisabled()
+  await page.getByRole('button',{name:'Suggest transitions'}).click()
+  await expect(page.getByText('Both tracks are at 120 BPM. Try a beatmatched transition.')).toBeVisible()
+})

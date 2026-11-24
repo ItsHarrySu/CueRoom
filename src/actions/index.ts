@@ -1,3 +1,4 @@
+import { generateTransition } from './cueroom/ai-transition'
 import type { ActionHandler } from 'deepspace/worker'
 import type { Env } from '../../worker'
 
@@ -8,4 +9,4 @@ import { previewTransition } from './cueroom/advisor.js'
 
 import { sendInvitationEmail } from './cueroom/invitation-email.js'
 
-export const actions: Record<string, ActionHandler<Env>> = { sendInvitationEmail, previewTransition, createRoom, joinRoom, addTrack, updateTrack, deleteTrack, reorderTracks }
+export const actions: Record<string, ActionHandler<Env>> = { generateTransition, sendInvitationEmail, previewTransition, createRoom, joinRoom, addTrack, updateTrack, deleteTrack, reorderTracks }

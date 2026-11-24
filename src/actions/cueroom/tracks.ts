@@ -91,7 +91,7 @@ async function inventory(tools: ActionTools, roomId: string) {
   }
 }
 
-async function live(tools: ActionTools, roomId: string) {
+export async function live(tools: ActionTools, roomId: string) {
   return (await inventory(tools, roomId)).ids
 }
 

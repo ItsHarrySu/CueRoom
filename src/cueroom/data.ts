@@ -69,7 +69,7 @@ export function orderedTracks(rows: RecordData<Track>[], room: Room) {
   )
 }
 
-type Action = 'sendInvitationEmail' | 'previewTransition' | 'createRoom' | 'joinRoom' | 'addTrack' | 'updateTrack' | 'deleteTrack' | 'reorderTracks'
+type Action = 'generateTransition' | 'sendInvitationEmail' | 'previewTransition' | 'createRoom' | 'joinRoom' | 'addTrack' | 'updateTrack' | 'deleteTrack' | 'reorderTracks'
 export async function act(name: Action, params: Record<string, unknown>) {
   const token = await getAuthToken()
   if (!token) throw Error('Sign in again to continue.')
@@ -92,6 +92,7 @@ export async function act(name: Action, params: Record<string, unknown>) {
   const data = result.data
   const confirmed =
     name === 'sendInvitationEmail' ? data?.accepted === true :
+    name === 'generateTransition' ? typeof data?.advice === 'string' && data.advice.length > 0 && data.advice.length <= 4096 :
     name === 'previewTransition' ? typeof data?.advice === 'string' && data.advice.length > 0 && data.advice.length <= 256 :
     name === 'joinRoom'
       ? data?.joined === true
