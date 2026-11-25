@@ -18,6 +18,7 @@ export function emailReady(env: Env, verified = !!verifiedEmailAcknowledgement) 
 export async function readSettings(env: Env) {
   if (!env.DEEPSPACE_APP_ID?.trim()) throw Error('Missing app identity')
   const db = env.INVITATION_QUOTA
+  if (!db) return { email: false, ai: false }
   const [, rows] = await db.batch<{feature: string; enabled: number}>([db.prepare(settingsTable),
     db.prepare('SELECT feature, enabled FROM integration_settings WHERE app = ?').bind(env.DEEPSPACE_APP_ID)])
   const selected = (feature: string) => rows.results.some(r => r.feature === feature && r.enabled === 1)
@@ -32,9 +33,10 @@ export function registerIntegrationSettings(app: Hono<AppContext>) {
     const env = c.env
     const auth = await resolveAuth(c.req.raw, env)
     if (!auth?.userId || auth.userId.startsWith('anon-')) return c.json({error:'Sign in required'},401)
-    const owner = auth.userId === env.OWNER_USER_ID && !!env.OWNER_USER_ID.trim()
+    const owner = !!env.OWNER_USER_ID?.trim() && auth.userId === env.OWNER_USER_ID
     if (!env.DEEPSPACE_APP_ID?.trim()) return c.json({error:'Settings unavailable'},503)
     if (c.req.method === 'PUT') {
+      if (!env.INVITATION_QUOTA) return c.json({error:'Settings unavailable'},503)
       if (!owner || c.req.header('Origin') !== new URL(c.req.url).origin) return c.json({error:'Forbidden'},403)
       if (c.req.header('Content-Type') !== 'application/json') return c.json({error:'Expected JSON'},415)
       const value = input.safeParse(await c.req.json().catch(() => null))
